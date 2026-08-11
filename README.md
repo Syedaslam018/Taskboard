@@ -4,11 +4,11 @@ A Trello/Jira-inspired collaborative project management app: workspaces, boards,
 real-time updates via Socket.io, and role-based access control.
 
 > **Status:** This repo currently implements **Phase 1 (project setup), Phase 2
-> (authentication), and Phase 3 (workspaces + RBAC)** end-to-end, each with an
-> integration test suite. Phases 4–9 (boards/tasks, drag-and-drop, sockets,
-> notifications, dashboard, Docker/seed/prod hardening) are scaffolded as clear
-> extension points (see `server/src/app.ts` route comments) and are next — see
-> [Roadmap](#roadmap).
+> (authentication), Phase 3 (workspaces + RBAC), and Phase 4 (boards, columns, tasks
+> CRUD)** end-to-end, each with an integration test suite. Phases 5–9
+> (drag-and-drop UI/optimistic updates, sockets, notifications, dashboard,
+> Docker/seed/prod hardening) are scaffolded as clear extension points (see
+> `server/src/app.ts` route comments) and are next — see [Roadmap](#roadmap).
 >
 > Note on test execution: this sandbox has no network access, so `npm install`
 > can't run here and the test suites below have **not been executed in this
@@ -104,9 +104,63 @@ on the hot path, at the cost of the array growing with very large member counts
 (fine for a Trello/Jira-style tool; would revisit for workspaces with thousands of
 members).
 
-Phase 4+ adds `Board`, `Column`, `Task`, `Comment`, `Notification`, and `Activity`,
-with the indexes called out in the original spec (`boardId+columnId` on Task,
-`userId+read` on Notification, etc.).
+Board
+- _id
+- workspaceId    (ref Workspace, indexed with createdAt for "boards in this workspace")
+- name
+- description?
+- columns[]      { _id, name, order }   (embedded - columns are cheap, board-scoped, low cardinality)
+- createdBy      (ref User)
+- createdAt / updatedAt
+
+Task
+- _id
+- boardId        (ref Board)
+- columnId       (matches a columns[]._id on the parent board)
+- title
+- description?
+- priority       LOW | MEDIUM | HIGH | URGENT (default MEDIUM)
+- assignee?      (ref User, indexed)
+- createdBy      (ref User)
+- labels[]
+- dueDate?
+- position       (integer order within its column - see reordering note below)
+- createdAt / updatedAt (createdAt indexed)
+```
+Compound index `{ boardId: 1, columnId: 1, position: 1 }` on Task serves the board's
+primary read: all tasks in a board, grouped by column, already in card order.
+
+Phase 7+ adds `Comment`, `Notification`, and `Activity` with the indexes called out
+in the original spec (`taskId+createdAt`, `userId+read`, `workspaceId+createdAt`).
+
+### IDOR-safe access chains
+
+Boards and tasks are addressed by their own `_id` in the URL, not by `workspaceId`,
+so access control has to hop upward to find out which workspace they belong to
+before checking membership:
+
+```
+Board route  (/api/boards/:id)          -> board.workspaceId       -> membership check
+Task route   (/api/tasks/:id)           -> task.boardId -> board.workspaceId -> membership check
+```
+
+This is `requireBoardRole` / `requireTaskRole` in `server/src/middleware/`, both
+built on the same `assertWorkspaceAccess` helper the workspace routes use — so a
+valid task ID belonging to a workspace you're not in returns 404, exactly like a
+workspace ID would. `POST /api/boards` is the one exception: since `workspaceId`
+arrives in the request body (not a URL param), the controller calls
+`assertWorkspaceAccess` directly instead of using a param-based middleware.
+
+### Efficient task reordering
+
+Moving a task (`PATCH /api/tasks/:id/move`) doesn't rewrite every task in a column.
+It does at most two `updateMany` calls with `$inc` to shift only the tasks between
+the task's old and new slot (closing the gap it left, opening a slot where it
+landed), then a single save on the moved task itself — see
+`server/src/services/task.service.ts`. Deleting a task closes its column's gap the
+same way. This is the "avoid inefficient database writes when reordering multiple
+tasks" requirement from the spec; the drag-and-drop UI + optimistic updates that
+call this endpoint land in Phase 5.
 
 ## API Documentation (current)
 
@@ -138,6 +192,24 @@ leave the workspace themselves; removing *someone else* is enforced inside the
 service layer and requires ADMIN+ (see `workspace.service.ts`). The workspace owner
 can never be removed or have their role changed through this endpoint — ownership
 transfer would be a deliberate, separate action (not yet implemented).
+
+| POST   | `/api/boards`       | ADMIN+ (workspace, from body) | Create a board (defaults to 5 standard columns) |
+| GET    | `/api/workspaces/:id/boards` | VIEWER+ | List boards in a workspace |
+| GET    | `/api/boards/:id`   | VIEWER+ | Get one board                        |
+| PATCH  | `/api/boards/:id`   | ADMIN+ | Update board name/description         |
+| DELETE | `/api/boards/:id`   | ADMIN+ | Delete a board (cascade-deletes its tasks) |
+| POST   | `/api/boards/:id/columns` | ADMIN+ | Add a column                    |
+| DELETE | `/api/boards/:id/columns/:columnId` | ADMIN+ | Delete a column (blocked while it still has tasks) |
+| GET    | `/api/boards/:id/tasks` | VIEWER+ | List tasks, with `assignee`/`priority`/`columnId`/`label`/`search`/`page`/`limit` filters |
+| POST   | `/api/boards/:id/tasks` | MEMBER+ | Create a task in a column |
+| GET    | `/api/tasks/:id`    | VIEWER+ | Get one task                          |
+| PATCH  | `/api/tasks/:id`    | MEMBER+ | Update title/description/priority/assignee/labels/dueDate |
+| DELETE | `/api/tasks/:id`    | ADMIN+\*\* | Delete a task                    |
+| PATCH  | `/api/tasks/:id/move` | MEMBER+ | Move a task to a column/position |
+
+\*\* The spec's permission table grants MEMBER "create/update/move tasks, comment" but
+doesn't explicitly list delete — ADMIN+ is a deliberately conservative reading of
+that gap; easy to loosen to MEMBER+ if that's not the intent.
 
 Auth endpoints are rate-limited (20 requests / 15 min / IP).
 
@@ -197,9 +269,19 @@ npm test
   workspace on their own but cannot remove someone else or the owner; only OWNER
   (not ADMIN) can delete the workspace.
 
-Both suites use an in-memory MongoDB (`mongodb-memory-server`), so no external DB is
-needed to run them. See the note at the top of this README on why they haven't been
-executed inside this sandbox.
+- `server/tests/board.test.ts`: default columns on creation, VIEWER blocked from
+  creating a board, 404 (not 403) for a non-member requesting a valid board ID,
+  cascade-delete of tasks when a board is deleted, and a column can't be deleted
+  while it still holds tasks.
+- `server/tests/task.test.ts`: task creation and positioning, VIEWER blocked /
+  MEMBER allowed to create tasks, correct reordering within a column, correct
+  position updates in *both* columns when a task moves across columns, filtering
+  by priority and search, and 404 (not 403) for a task in a workspace the
+  requester isn't in.
+
+All four suites use an in-memory MongoDB (`mongodb-memory-server`), so no external
+DB is needed to run them. See the note at the top of this README on why they
+haven't been executed inside this sandbox.
 
 ## Roadmap
 
@@ -208,8 +290,8 @@ executed inside this sandbox.
 | 1 | Vite/Express/Mongo/Docker/ESLint/Prettier scaffold | ✅ Done |
 | 2 | Auth: register/login/logout/refresh/me, bcrypt, JWT, protected routes | ✅ Done |
 | 3 | Workspace model, membership, RBAC middleware (OWNER/ADMIN/MEMBER/VIEWER) | ✅ Done |
-| 4 | Boards, Columns, Tasks CRUD, IDOR-safe workspace scoping | ⏭ Next |
-| 5 | Drag-and-drop, position/ordering, optimistic updates + rollback | Planned |
+| 4 | Boards, Columns, Tasks CRUD, IDOR-safe workspace scoping | ✅ Done |
+| 5 | Drag-and-drop UI, optimistic updates + rollback (backend reordering already done) | ⏭ Next |
 | 6 | Socket.io: rooms per workspace, task/comment events, presence | Planned |
 | 7 | Notifications, activity feed, search/filter with debouncing | Planned |
 | 8 | Dashboard, performance pass (`.lean()`, indexes, memoization), broader tests | Planned |
@@ -304,6 +386,24 @@ members, since that keeps each write small and lets you paginate the member list
 enumerate valid workspace IDs by watching which ones return 403 vs 404. Returning 404
 uniformly for "doesn't exist" and "you're not a member" makes workspace IDs
 non-enumerable from the response code alone.
+
+**13. How does moving a task avoid rewriting the whole column?**
+The move endpoint only touches the tasks strictly between the task's old and new
+position — via two `updateMany({...}, { $inc: { position: ±1 } })` calls (or one if
+it's staying in the same column) — plus a single save on the moved task itself. For
+a column with hundreds of cards, that's 2-3 writes instead of hundreds. The
+tradeoff is `position` values can in theory get sparse or need renumbering after a
+huge number of moves; a production version might switch to fractional/lexicographic
+positions (e.g. "b" between "a" and "c") to avoid ever needing a bulk renumber.
+
+**14. Why is `POST /api/boards` handled differently from `GET /api/boards/:id` for authorization?**
+Every other board/task route identifies its resource by ID in the URL, so a single
+middleware (`requireBoardRole`) can load it and check membership before the
+controller runs. Board *creation* has no board yet — the only signal is
+`workspaceId` in the request body — so that one route calls the same underlying
+`assertWorkspaceAccess` helper directly inside the controller instead of via a
+param-based middleware. Same security guarantee, just invoked at a different point
+because there's no URL param to hang it off of.
 
 **10. What would you change before this went to real production?**
 Add centralized structured logging (pino/winston) and request IDs, move rate-limit
