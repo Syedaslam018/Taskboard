@@ -1,0 +1,35 @@
+no# Dependencies
+node_modules/
+client/node_modules/
+server/node_modules/
+server/.env
+client/.env
+client/package-lock.json
+server/package-lock.json
+
+docker-compose.yml
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Build files
+dist/
+build/
+client/dist/
+server/dist/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# TypeScript
+*.tsbuildinfo
+
