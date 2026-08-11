@@ -3,19 +3,19 @@
 A Trello/Jira-inspired collaborative project management app: workspaces, boards, tasks,
 real-time updates via Socket.io, and role-based access control.
 
-> **Status:** This repo currently implements **Phase 1 (project setup) and Phase 2
-> (authentication)** end-to-end and verified with a passing test suite. Phases 3–9
-> (workspaces/RBAC, boards/tasks, drag-and-drop, sockets, notifications, dashboard,
-> Docker/seed/prod hardening) are scaffolded as clear extension points (see
-> `server/src/app.ts` route comments) and are the next increments — see
-> [Roadmap](#roadmap) below for the exact plan.
+> **Status:** This repo currently implements **Phase 1 (project setup), Phase 2
+> (authentication), and Phase 3 (workspaces + RBAC)** end-to-end, each with an
+> integration test suite. Phases 4–9 (boards/tasks, drag-and-drop, sockets,
+> notifications, dashboard, Docker/seed/prod hardening) are scaffolded as clear
+> extension points (see `server/src/app.ts` route comments) and are next — see
+> [Roadmap](#roadmap).
 >
-> Building the whole spec in one pass would mean generating thousands of lines of
-> business logic (RBAC middleware, Kanban reordering, six more Mongoose models, ten+
-> Socket.io events, notifications, a full dashboard, and a real test suite) with no
-> chance to verify any of it actually works. Auth is the foundation everything else
-> sits on, so it's built first, for real, with tests — and each following phase will
-> get the same treatment.
+> Note on test execution: this sandbox has no network access, so `npm install`
+> can't run here and the test suites below have **not been executed in this
+> environment** — I can't honestly claim "passing" without running them. They're
+> ordinary Jest + Supertest + `mongodb-memory-server` tests with no exotic setup;
+> run `npm test` in `server/` after `npm install` to verify. If anything fails,
+> tell me the output and I'll fix it.
 
 ## Architecture
 
@@ -87,11 +87,26 @@ User
 - passwordHash   (select: false, never serialized)
 - avatar?
 - createdAt / updatedAt
+
+Workspace
+- _id
+- name
+- description?
+- owner          (ref User, indexed)
+- members[]      { user (ref User), role: OWNER|ADMIN|MEMBER|VIEWER, joinedAt }
+                 (indexed on members.user for "my workspaces" lookups)
+- createdAt / updatedAt
 ```
 
-Phase 3+ adds `Workspace`, `Board`, `Column`, `Task`, `Comment`, `Notification`, and
-`Activity`, exactly as specified, with the indexes called out in the original spec
-(`boardId+columnId` on Task, `userId+read` on Notification, etc.).
+Members are embedded on the workspace document rather than a separate collection:
+membership is checked on almost every request, so this avoids an extra query/join
+on the hot path, at the cost of the array growing with very large member counts
+(fine for a Trello/Jira-style tool; would revisit for workspaces with thousands of
+members).
+
+Phase 4+ adds `Board`, `Column`, `Task`, `Comment`, `Notification`, and `Activity`,
+with the indexes called out in the original spec (`boardId+columnId` on Task,
+`userId+read` on Notification, etc.).
 
 ## API Documentation (current)
 
@@ -109,6 +124,20 @@ All responses follow:
 | POST   | `/api/auth/refresh` | Cookie | Issues a new access token           |
 | GET    | `/api/auth/me`      | Bearer | Returns the current user            |
 | GET    | `/api/health`       | No   | Liveness check                        |
+| POST   | `/api/workspaces`   | Bearer | Create a workspace (creator becomes OWNER) |
+| GET    | `/api/workspaces`   | Bearer | List workspaces the caller belongs to |
+| GET    | `/api/workspaces/:id` | VIEWER+ | Get one workspace (404 if not a member) |
+| PATCH  | `/api/workspaces/:id` | ADMIN+ | Update name/description             |
+| DELETE | `/api/workspaces/:id` | OWNER | Delete the workspace                 |
+| POST   | `/api/workspaces/:id/members` | ADMIN+ | Add a member by email + role |
+| DELETE | `/api/workspaces/:id/members/:userId` | VIEWER+* | Remove a member |
+| PATCH  | `/api/workspaces/:id/members/:userId` | ADMIN+ | Change a member's role |
+
+\* The member-removal route only requires VIEWER membership so anyone can hit it to
+leave the workspace themselves; removing *someone else* is enforced inside the
+service layer and requires ADMIN+ (see `workspace.service.ts`). The workspace owner
+can never be removed or have their role changed through this endpoint — ownership
+transfer would be a deliberate, separate action (not yet implemented).
 
 Auth endpoints are rate-limited (20 requests / 15 min / IP).
 
@@ -159,11 +188,18 @@ cd server
 npm test
 ```
 
-`server/tests/auth.test.ts` spins up an in-memory MongoDB (`mongodb-memory-server`)
-and covers: successful registration (and that `passwordHash` never leaks), duplicate
-email rejection (409), login with correct/incorrect password, and `/me` being blocked
-without a token and working with one. This is a real, currently-passing suite — not a
-placeholder.
+- `server/tests/auth.test.ts`: registration (and that `passwordHash` never leaks),
+  duplicate email rejection (409), login with correct/incorrect password, `/me`
+  blocked without a token and working with one.
+- `server/tests/workspace.test.ts`: workspace creation makes the creator OWNER;
+  non-members get 404 (not 403) reading a workspace they're not in; a VIEWER is
+  blocked from updating a workspace while an ADMIN/OWNER can; a member can leave a
+  workspace on their own but cannot remove someone else or the owner; only OWNER
+  (not ADMIN) can delete the workspace.
+
+Both suites use an in-memory MongoDB (`mongodb-memory-server`), so no external DB is
+needed to run them. See the note at the top of this README on why they haven't been
+executed inside this sandbox.
 
 ## Roadmap
 
@@ -171,8 +207,8 @@ placeholder.
 |-------|-------|--------|
 | 1 | Vite/Express/Mongo/Docker/ESLint/Prettier scaffold | ✅ Done |
 | 2 | Auth: register/login/logout/refresh/me, bcrypt, JWT, protected routes | ✅ Done |
-| 3 | Workspace model, membership, RBAC middleware (OWNER/ADMIN/MEMBER/VIEWER) | ⏭ Next |
-| 4 | Boards, Columns, Tasks CRUD, IDOR-safe workspace scoping | Planned |
+| 3 | Workspace model, membership, RBAC middleware (OWNER/ADMIN/MEMBER/VIEWER) | ✅ Done |
+| 4 | Boards, Columns, Tasks CRUD, IDOR-safe workspace scoping | ⏭ Next |
 | 5 | Drag-and-drop, position/ordering, optimistic updates + rollback | Planned |
 | 6 | Socket.io: rooms per workspace, task/comment events, presence | Planned |
 | 7 | Notifications, activity feed, search/filter with debouncing | Planned |
@@ -252,6 +288,22 @@ board → task is a shallow, mostly-one-directional reference chain, which Mongo
 `populate()` (used sparingly) handles well. The tradeoff is weaker
 transactional/relational guarantees, which matters less for a Kanban tool than for,
 say, financial data.
+
+**11. Why embed members on the Workspace document instead of a separate Membership collection?**
+Membership is checked on nearly every workspace-scoped request (`requireWorkspaceRole`
+runs before almost every board/task route), so keeping it on the workspace document
+means that check is a single `findById` with no join. The tradeoff is the array grows
+with the workspace's member count and every membership change rewrites the whole
+document — a fine tradeoff for a Trello-style tool with dozens of members per
+workspace, but I'd switch to a separate `Membership` collection (indexed on
+`workspaceId + userId`) if this needed to support workspaces with thousands of
+members, since that keeps each write small and lets you paginate the member list.
+
+**12. Why does `GET /api/workspaces/:id` return 404 instead of 403 for a non-member?**
+403 confirms the resource exists but you can't see it — which lets an attacker
+enumerate valid workspace IDs by watching which ones return 403 vs 404. Returning 404
+uniformly for "doesn't exist" and "you're not a member" makes workspace IDs
+non-enumerable from the response code alone.
 
 **10. What would you change before this went to real production?**
 Add centralized structured logging (pino/winston) and request IDs, move rate-limit

@@ -5,6 +5,7 @@ import morgan from "morgan";
 import cookieParser from "cookie-parser";
 import { env } from "./config/env";
 import authRoutes from "./routes/auth.routes";
+import workspaceRoutes from "./routes/workspace.routes";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler";
 
 export function createApp(): Application {
@@ -28,7 +29,7 @@ export function createApp(): Application {
   });
 
   app.use("/api/auth", authRoutes);
-  // Phase 3+: app.use("/api/workspaces", workspaceRoutes);
+  app.use("/api/workspaces", workspaceRoutes);
   // Phase 4+: app.use("/api/boards", boardRoutes);
   // Phase 4+: app.use("/api/tasks", taskRoutes);
   // Phase 7+: app.use("/api/notifications", notificationRoutes);
