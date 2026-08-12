@@ -4,9 +4,9 @@ A Trello/Jira-inspired collaborative project management app: workspaces, boards,
 real-time updates via Socket.io, and role-based access control.
 
 > **Status:** This repo currently implements **Phase 1 (project setup), Phase 2
-> (authentication), Phase 3 (workspaces + RBAC), and Phase 4 (boards, columns, tasks
-> CRUD)** end-to-end, each with an integration test suite. Phases 5–9
-> (drag-and-drop UI/optimistic updates, sockets, notifications, dashboard,
+> (authentication), Phase 3 (workspaces + RBAC), Phase 4 (boards, columns, tasks
+> CRUD), and Phase 5 (drag-and-drop UI with optimistic updates)** end-to-end, each
+> with a test suite. Phases 6–9 (sockets, notifications, dashboard,
 > Docker/seed/prod hardening) are scaffolded as clear extension points (see
 > `server/src/app.ts` route comments) and are next — see [Roadmap](#roadmap).
 >
@@ -55,11 +55,12 @@ point already marked).
 project-root/
 ├── client/               # React + TS + Vite
 │   └── src/
-│       ├── components/
-│       ├── pages/         # LoginPage, RegisterPage, DashboardPage
-│       ├── hooks/         # useAuth.ts (TanStack Query)
-│       ├── services/      # api.ts (axios + refresh interceptor), authService.ts
+│       ├── components/kanban/  # KanbanColumn, TaskCard, TaskDetailModal, PriorityBadge
+│       ├── pages/         # Login/Register/Dashboard, Workspaces(Detail)Page, BoardPage
+│       ├── hooks/         # useAuth, useWorkspaces, useBoards, useTasks (TanStack Query)
+│       ├── services/      # api.ts (axios + refresh interceptor), *Service.ts per resource
 │       ├── stores/        # authStore.ts (Zustand)
+│       ├── utils/         # reorder.ts (pure DnD reorder logic, unit tested)
 │       ├── types/
 │       └── router/
 ├── server/                # Express + TS
@@ -253,6 +254,32 @@ docker compose up
 
 Starts MongoDB, the API on `:5000`, and the client dev server on `:5173`.
 
+## Frontend Architecture (Phase 5 additions)
+
+```
+WorkspacesPage -> WorkspaceDetailPage (boards list) -> BoardPage (Kanban)
+```
+
+- **`BoardPage`** owns a local `columns: Record<columnId, Task[]>` state, re-derived
+  from the `useTasksQuery` cache via a `useEffect` whenever the server data changes.
+  This local state — not the React Query cache directly — is what the drag-and-drop
+  UI reorders optimistically.
+- **`onDragEnd`** calls a pure, unit-tested `reorderColumns()` helper
+  (`client/src/utils/reorder.ts`) to splice the moved task out of its source column
+  and into the destination column *immediately*, then fires the
+  `PATCH /api/tasks/:id/move` mutation in the background.
+- **Rollback on failure**: `useMoveTask`'s `onError` simply invalidates the
+  `["tasks", boardId]` query. That triggers a refetch, which re-runs the `useEffect`
+  above and resyncs `columns` to the server's authoritative order — an implicit
+  rollback with no separate "undo" code path to maintain, at the cost of a visible
+  snap-back rather than an animated reverse-drag.
+- **Why local state instead of a React Query optimistic update (`onMutate` +
+  `setQueryData`)**: the query holds a flat, unsorted list of tasks for the whole
+  board; the UI needs a grouped-by-column, ordered structure. Reordering that inside
+  the cache on every drag would duplicate the same splice logic `reorderColumns`
+  already does, for no real benefit — local state already resyncs automatically once
+  the mutation settles.
+
 ## Testing
 
 ```bash
@@ -280,8 +307,16 @@ npm test
   requester isn't in.
 
 All four suites use an in-memory MongoDB (`mongodb-memory-server`), so no external
-DB is needed to run them. See the note at the top of this README on why they
-haven't been executed inside this sandbox.
+DB is needed to run them.
+
+Frontend: `cd client && npm test` runs `client/src/utils/__tests__/reorder.test.ts`
+(Vitest) — same-column reordering, cross-column moves landing at the correct index,
+and that `reorderColumns` doesn't mutate its input. This is the pure function that
+drives the Kanban drag-and-drop, extracted specifically so it's testable without
+mounting `@hello-pangea/dnd` or the full `BoardPage`.
+
+See the note at the top of this README on why none of these suites have been
+executed inside this sandbox (no network access to `npm install`).
 
 ## Roadmap
 
@@ -291,8 +326,8 @@ haven't been executed inside this sandbox.
 | 2 | Auth: register/login/logout/refresh/me, bcrypt, JWT, protected routes | ✅ Done |
 | 3 | Workspace model, membership, RBAC middleware (OWNER/ADMIN/MEMBER/VIEWER) | ✅ Done |
 | 4 | Boards, Columns, Tasks CRUD, IDOR-safe workspace scoping | ✅ Done |
-| 5 | Drag-and-drop UI, optimistic updates + rollback (backend reordering already done) | ⏭ Next |
-| 6 | Socket.io: rooms per workspace, task/comment events, presence | Planned |
+| 5 | Drag-and-drop UI, optimistic updates + rollback (backend reordering already done) | ✅ Done |
+| 6 | Socket.io: rooms per workspace, task/comment events, presence | ⏭ Next |
 | 7 | Notifications, activity feed, search/filter with debouncing | Planned |
 | 8 | Dashboard, performance pass (`.lean()`, indexes, memoization), broader tests | Planned |
 | 9 | Seed script, production Docker hardening, final docs | Planned |
@@ -404,6 +439,25 @@ controller runs. Board *creation* has no board yet — the only signal is
 `assertWorkspaceAccess` helper directly inside the controller instead of via a
 param-based middleware. Same security guarantee, just invoked at a different point
 because there's no URL param to hang it off of.
+
+**15. Why does the drag-and-drop rollback just invalidate the query instead of restoring a saved snapshot?**
+Because the local `columns` state is already derived, one-directionally, from the
+`useTasksQuery` cache via a `useEffect` — it's not an independent source of truth.
+Invalidating forces a refetch, and the effect re-runs and rebuilds `columns` from
+whatever the server now says is correct. That's strictly simpler than snapshotting
+and manually restoring the pre-drag state, and it can't drift out of sync with the
+server, since it always ends up re-derived from a real fetch rather than a cached
+guess. The tradeoff is a visible snap-back on failure rather than a smooth reverse
+animation — a reasonable UX tradeoff for a rare error path.
+
+**16. Why extract `reorderColumns` into its own file instead of leaving it inline in `onDragEnd`?**
+Testability. `@hello-pangea/dnd`'s `DropResult` and the DOM drag events around it
+are annoying to simulate in a unit test, but the actual logic that matters — "take
+this item out of this array, put it in that array, at this index, without mutating
+the input" — has nothing to do with dragging. Pulling it into a pure function means
+`reorder.test.ts` can assert on that logic directly and fast, without mounting any
+component, while `BoardPage` still calls the exact same function that ships to
+production.
 
 **10. What would you change before this went to real production?**
 Add centralized structured logging (pino/winston) and request IDs, move rate-limit
