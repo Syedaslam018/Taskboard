@@ -1,4 +1,5 @@
 import { useCurrentUser, useLogout } from "@/hooks/useAuth";
+import { Link } from "react-router-dom";
 
 export default function DashboardPage() {
   const { data: user, isLoading } = useCurrentUser();
@@ -31,7 +32,12 @@ export default function DashboardPage() {
               ))}
             </div>
             <p className="mt-10 text-sm text-slate-400">
-              Workspaces, boards, and tasks land in Phase 3–4 of the build.
+              <Link to="/workspaces" className="font-medium text-brand-600 hover:underline">
+                Go to your workspaces &rarr;
+              </Link>
+            </p>
+            <p className="mt-2 text-xs text-slate-400">
+              Notifications, activity feed, and the stats above land in Phase 7-8 of the build.
             </p>
           </>
         )}
