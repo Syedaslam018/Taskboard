@@ -8,7 +8,7 @@ import authRoutes from "./routes/auth.routes";
 import workspaceRoutes from "./routes/workspace.routes";
 import boardRoutes from "./routes/board.routes";
 import taskRoutes from "./routes/task.routes";
-// Phase 7+: import notificationRoutes from "./routes/notification.routes";
+import commentRoutes from "./routes/comment.routes";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler";
 
 export function createApp(): Application {
@@ -35,6 +35,7 @@ export function createApp(): Application {
   app.use("/api/workspaces", workspaceRoutes);
   app.use("/api/boards", boardRoutes);
   app.use("/api/tasks", taskRoutes);
+  app.use("/api/comments", commentRoutes);
   // Phase 7+: app.use("/api/notifications", notificationRoutes);
 
   app.use(notFoundHandler);

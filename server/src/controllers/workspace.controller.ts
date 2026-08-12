@@ -3,6 +3,8 @@ import { sendSuccess } from "../utils/apiResponse";
 import { workspaceService } from "../services/workspace.service";
 import { WorkspaceScopedRequest } from "../middleware/rbac";
 import { AuthenticatedRequest } from "../middleware/auth";
+import { getIO } from "../sockets/io";
+import { workspaceRoom } from "../sockets/rooms";
 
 export const workspaceController = {
   create: catchAsync(async (req: AuthenticatedRequest, res) => {
@@ -34,6 +36,11 @@ export const workspaceController = {
   addMember: catchAsync(async (req: WorkspaceScopedRequest, res) => {
     const { email, role } = req.body;
     const workspace = await workspaceService.addMember(req.workspace!, email, role);
+
+    getIO()
+      ?.to(workspaceRoom(String(workspace._id)))
+      .emit("member:added", { workspaceId: String(workspace._id), email, role });
+
     sendSuccess(res, { workspace }, "Member added successfully", 201);
   }),
 
@@ -44,6 +51,11 @@ export const workspaceController = {
       req.userId as string,
       req.membershipRole!
     );
+
+    getIO()
+      ?.to(workspaceRoom(String(workspace._id)))
+      .emit("member:removed", { workspaceId: String(workspace._id), userId: req.params.userId });
+
     sendSuccess(res, { workspace }, "Member removed successfully");
   }),
 

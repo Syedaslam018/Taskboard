@@ -3,9 +3,10 @@ import { useParams, Link } from "react-router-dom";
 import { DragDropContext, DropResult } from "@hello-pangea/dnd";
 import { useBoard } from "@/hooks/useBoards";
 import { useTasksQuery, useMoveTask } from "@/hooks/useTasks";
+import { useRealtimeBoard } from "@/hooks/useRealtimeBoard";
 import { Task } from "@/types/task";
-import KanbanColumn from "@/components/kanban/KanbanColumn";
 import { reorderColumns } from "@/utils/reorder";
+import KanbanColumn from "@/components/kanban/KanbanColumn";
 import TaskDetailModal from "@/components/kanban/TaskDetailModal";
 
 export default function BoardPage() {
@@ -13,6 +14,7 @@ export default function BoardPage() {
   const { data: board, isLoading: boardLoading } = useBoard(boardId!);
   const { data: tasksData, isLoading: tasksLoading } = useTasksQuery(boardId!);
   const moveTask = useMoveTask(boardId!);
+  const { onlineUserIds } = useRealtimeBoard(boardId, board?.workspaceId);
 
   const [columns, setColumns] = useState<Record<string, Task[]>>({});
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
@@ -72,6 +74,10 @@ export default function BoardPage() {
             &larr; Workspaces
           </Link>
           <h1 className="text-lg font-semibold text-slate-900">{board.name}</h1>
+        </div>
+        <div className="flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
+          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+          {onlineUserIds.length} online
         </div>
       </header>
       <main className="overflow-x-auto px-6 py-6">

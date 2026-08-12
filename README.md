@@ -5,8 +5,9 @@ real-time updates via Socket.io, and role-based access control.
 
 > **Status:** This repo currently implements **Phase 1 (project setup), Phase 2
 > (authentication), Phase 3 (workspaces + RBAC), Phase 4 (boards, columns, tasks
-> CRUD), and Phase 5 (drag-and-drop UI with optimistic updates)** end-to-end, each
-> with a test suite. Phases 6–9 (sockets, notifications, dashboard,
+> CRUD), Phase 5 (drag-and-drop UI with optimistic updates), and Phase 6 (Socket.io
+> real-time collaboration + comments)** end-to-end, each with a test suite. Phases
+> 7–9 (notifications, activity feed, search/filter, dashboard,
 > Docker/seed/prod hardening) are scaffolded as clear extension points (see
 > `server/src/app.ts` route comments) and are next — see [Roadmap](#roadmap).
 >
@@ -57,8 +58,8 @@ project-root/
 │   └── src/
 │       ├── components/kanban/  # KanbanColumn, TaskCard, TaskDetailModal, PriorityBadge
 │       ├── pages/         # Login/Register/Dashboard, Workspaces(Detail)Page, BoardPage
-│       ├── hooks/         # useAuth, useWorkspaces, useBoards, useTasks (TanStack Query)
-│       ├── services/      # api.ts (axios + refresh interceptor), *Service.ts per resource
+│       ├── hooks/         # useAuth, useWorkspaces, useBoards, useTasks, useRealtimeBoard, useBootstrapAuth
+│       ├── services/      # api.ts (axios + refresh interceptor), socket.ts, *Service.ts per resource
 │       ├── stores/        # authStore.ts (Zustand)
 │       ├── utils/         # reorder.ts (pure DnD reorder logic, unit tested)
 │       ├── types/
@@ -66,14 +67,14 @@ project-root/
 ├── server/                # Express + TS
 │   └── src/
 │       ├── config/        # env.ts, db.ts
-│       ├── controllers/   # auth.controller.ts
-│       ├── middleware/    # auth.ts, validate.ts, errorHandler.ts
-│       ├── models/        # User.ts
-│       ├── routes/        # auth.routes.ts
-│       ├── services/      # auth.service.ts
-│       ├── sockets/        # (Phase 6)
+│       ├── controllers/   # auth, workspace, board, task, comment
+│       ├── middleware/    # auth, rbac, boardAccess, taskAccess, commentAccess, validate, errorHandler
+│       ├── models/        # User, Workspace, Board, Task, Comment
+│       ├── routes/        # auth, workspace, board, task, comment
+│       ├── services/      # matching business logic per resource
+│       ├── sockets/        # index.ts (auth + rooms + presence), io.ts, rooms.ts
 │       ├── utils/         # AppError.ts, catchAsync.ts, apiResponse.ts, token.ts
-│       └── validators/    # auth.validators.ts (Zod)
+│       └── validators/    # Zod schemas per resource
 ├── docker-compose.yml
 └── README.md
 ```
@@ -131,8 +132,17 @@ Task
 Compound index `{ boardId: 1, columnId: 1, position: 1 }` on Task serves the board's
 primary read: all tasks in a board, grouped by column, already in card order.
 
-Phase 7+ adds `Comment`, `Notification`, and `Activity` with the indexes called out
-in the original spec (`taskId+createdAt`, `userId+read`, `workspaceId+createdAt`).
+```
+Comment
+- _id
+- taskId    (ref Task, indexed with createdAt for a task's comment thread in order)
+- author    (ref User)
+- content
+- createdAt / updatedAt
+```
+
+Phase 7+ adds `Notification` and `Activity`, with the indexes called out in the
+original spec (`userId+read`, `workspaceId+createdAt`).
 
 ### IDOR-safe access chains
 
@@ -212,7 +222,53 @@ transfer would be a deliberate, separate action (not yet implemented).
 doesn't explicitly list delete — ADMIN+ is a deliberately conservative reading of
 that gap; easy to loosen to MEMBER+ if that's not the intent.
 
+| GET    | `/api/tasks/:id/comments` | VIEWER+ | List a task's comments, oldest first |
+| POST   | `/api/tasks/:id/comments` | MEMBER+ | Add a comment (broadcasts `comment:created`) |
+| PATCH  | `/api/comments/:id` | VIEWER+, author only | Edit your own comment |
+| DELETE | `/api/comments/:id` | VIEWER+, author only | Delete your own comment |
+
 Auth endpoints are rate-limited (20 requests / 15 min / IP).
+
+## Socket.io (Phase 6)
+
+Connect with the same short-lived access token used for REST, sent in the
+handshake (not a cookie):
+
+```js
+import { io } from "socket.io-client";
+const socket = io("/", { path: "/socket.io", auth: { token: accessToken } });
+```
+
+A connection with no token, or an expired/invalid one, is rejected before
+`connection` fires.
+
+| Client emits | Payload | Effect |
+|---|---|---|
+| `workspace:join` | `workspaceId`, optional ack callback | Joins `workspace:{id}` room *if* the caller is a member (same `assertWorkspaceAccess` check as REST); ack reports `{ success, message? }` |
+| `workspace:leave` | `workspaceId` | Leaves the room, updates presence |
+
+| Server emits (to `workspace:{id}`) | Payload | Fired by |
+|---|---|---|
+| `task:created` | the new task | `POST /api/boards/:id/tasks` |
+| `task:updated` | the updated task | `PATCH /api/tasks/:id` |
+| `task:moved` | the moved task | `PATCH /api/tasks/:id/move` |
+| `task:deleted` | `{ taskId, boardId }` | `DELETE /api/tasks/:id` |
+| `comment:created` | the new comment (with `taskId`) | `POST /api/tasks/:id/comments` |
+| `member:added` | `{ workspaceId, email, role }` | `POST /api/workspaces/:id/members` |
+| `member:removed` | `{ workspaceId, userId }` | `DELETE /api/workspaces/:id/members/:userId` |
+| `user:online` / `user:offline` | `{ userId, workspaceId, onlineUserIds }` | Join/leave/disconnect |
+
+`notification:new` is defined in the spec but not yet emitted — there's no
+`Notification` model until Phase 7, so there's nothing to broadcast yet.
+
+**Frontend integration**: `client/src/services/socket.ts` keeps a single socket
+connected for as long as an access token exists (subscribed to the Zustand auth
+store — connects on login, reconnects on token refresh, disconnects on logout).
+`useRealtimeBoard(boardId, workspaceId)` (used by `BoardPage`) joins the
+workspace room while the board is open and applies incoming task events directly
+to the `["tasks", boardId]` React Query cache — which `BoardPage`'s existing
+`useEffect` then turns back into the per-column UI state automatically, so a
+teammate's drag-and-drop move shows up live with no extra merge logic.
 
 ## Environment Variables
 
@@ -305,9 +361,22 @@ npm test
   position updates in *both* columns when a task moves across columns, filtering
   by priority and search, and 404 (not 403) for a task in a workspace the
   requester isn't in.
+- `server/tests/comment.test.ts`: adding a comment returns it with the author
+  populated, a VIEWER is blocked from commenting, a member can edit their own
+  comment but not someone else's (403), and 404 (not 403) for a comment reached
+  through a task in a workspace the requester isn't in.
+- `server/tests/socket.test.ts`: a connection with no access token is rejected
+  before it completes; a member can join their workspace's room and receives a
+  `user:online` presence event containing their own ID; a non-member's
+  `workspace:join` attempt gets `{ success: false }`; a socket joined to the
+  room receives `task:created` when a task is created over REST; and — the
+  negative case that actually proves room isolation — a socket that never
+  joined does **not** receive that same event.
 
-All four suites use an in-memory MongoDB (`mongodb-memory-server`), so no external
-DB is needed to run them.
+All six suites use an in-memory MongoDB (`mongodb-memory-server`), so no external
+DB is needed to run them. The socket suite spins up a real HTTP server on an
+ephemeral port and connects with `socket.io-client`, rather than mocking the
+transport, so it's exercising the actual auth handshake and room-broadcast logic.
 
 Frontend: `cd client && npm test` runs `client/src/utils/__tests__/reorder.test.ts`
 (Vitest) — same-column reordering, cross-column moves landing at the correct index,
@@ -327,8 +396,8 @@ executed inside this sandbox (no network access to `npm install`).
 | 3 | Workspace model, membership, RBAC middleware (OWNER/ADMIN/MEMBER/VIEWER) | ✅ Done |
 | 4 | Boards, Columns, Tasks CRUD, IDOR-safe workspace scoping | ✅ Done |
 | 5 | Drag-and-drop UI, optimistic updates + rollback (backend reordering already done) | ✅ Done |
-| 6 | Socket.io: rooms per workspace, task/comment events, presence | ⏭ Next |
-| 7 | Notifications, activity feed, search/filter with debouncing | Planned |
+| 6 | Socket.io: rooms per workspace, task/comment events, presence | ✅ Done |
+| 7 | Notifications, activity feed, search/filter with debouncing | ⏭ Next |
 | 8 | Dashboard, performance pass (`.lean()`, indexes, memoization), broader tests | Planned |
 | 9 | Seed script, production Docker hardening, final docs | Planned |
 
@@ -458,6 +527,26 @@ the input" — has nothing to do with dragging. Pulling it into a pure function 
 `reorder.test.ts` can assert on that logic directly and fast, without mounting any
 component, while `BoardPage` still calls the exact same function that ships to
 production.
+
+**17. Why authenticate sockets with the access token in the handshake instead of the refresh cookie?**
+The refresh cookie is deliberately `httpOnly` so client-side JS can never read it —
+that's the whole point of it being `httpOnly`. Socket.io's browser client can't
+attach a cookie to the handshake the way a same-origin `fetch` can either way
+without extra plumbing, so the natural fit is the same short-lived access token
+already sitting in memory for REST calls. It gives sockets the identical security
+posture as REST: a stolen token is only useful for ~15 minutes, and the connection
+is rejected outright (via `io.use()` middleware) before `connection` even fires if
+the token is missing or invalid — never silently allowed through as "anonymous."
+
+**18. Why track presence with a `Map<workspaceId, Map<userId, Set<socketId>>>` instead of just a `Set<userId>` per workspace?**
+A single `Set<userId>` breaks the moment someone opens the same board in two tabs:
+closing one tab would remove them from the set and broadcast `user:offline` even
+though they're still connected in the other tab. Keying by `socketId` inside each
+user's entry means a user only flips to offline once every one of their
+connections for that workspace has actually disconnected — `disconnect` only
+removes that one `socketId`, and the "did they go offline" broadcast only fires
+once their per-user `Set` is empty. It's a small amount of extra bookkeeping for a
+noticeably less buggy presence indicator.
 
 **10. What would you change before this went to real production?**
 Add centralized structured logging (pino/winston) and request IDs, move rate-limit
