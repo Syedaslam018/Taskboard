@@ -3,12 +3,12 @@
 A Trello/Jira-inspired collaborative project management app: workspaces, boards, tasks,
 real-time updates via Socket.io, and role-based access control.
 
-> **Status:** This repo currently implements **Phases 1–7**: project setup,
-> authentication, workspaces + RBAC, boards/columns/tasks CRUD, drag-and-drop UI
-> with optimistic updates, Socket.io real-time collaboration + comments, and
-> notifications/activity feed/search — each with a test suite. Phase 8 (dashboard
-> stats, performance pass, broader test coverage) and Phase 9 (seed script,
-> production Docker hardening) are what's left — see [Roadmap](#roadmap).
+> **Status:** All 9 phases from the original build spec are implemented: project
+> setup, authentication, workspaces + RBAC, boards/columns/tasks CRUD,
+> drag-and-drop UI with optimistic updates, Socket.io real-time collaboration +
+> comments, notifications/activity feed/search, a real dashboard + performance
+> pass, and a seed script + production Docker hardening — each phase with its own
+> test suite along the way.
 >
 > Note on test execution: this sandbox has no network access, so `npm install`
 > can't run here and the test suites below have **not been executed in this
@@ -60,7 +60,8 @@ project-root/
 │       ├── components/activity/     # ActivityFeed
 │       ├── pages/         # Login/Register/Dashboard, Workspaces(Detail)Page, BoardPage
 │       ├── hooks/         # useAuth, useWorkspaces, useBoards, useTasks, useRealtimeBoard,
-│       │                    useBootstrapAuth, useNotifications, useActivity, useWorkspaceMembers
+│       │                    useBootstrapAuth, useNotifications, useActivity,
+│       │                    useWorkspaceMembers, useDashboard
 │       ├── services/      # api.ts (axios + refresh interceptor), socket.ts, *Service.ts per resource
 │       ├── stores/        # authStore.ts (Zustand)
 │       ├── utils/         # reorder.ts, useDebouncedValue.ts (both unit tested)
@@ -69,11 +70,11 @@ project-root/
 ├── server/                # Express + TS
 │   └── src/
 │       ├── config/        # env.ts, db.ts
-│       ├── controllers/   # auth, workspace, board, task, comment, notification, activity
+│       ├── controllers/   # auth, workspace, board, task, comment, notification, activity, dashboard
 │       ├── middleware/    # auth, rbac, boardAccess, taskAccess, commentAccess, validate, errorHandler
 │       ├── models/        # User, Workspace, Board, Task, Comment, Notification, Activity
-│       ├── routes/        # auth, workspace, board, task, comment, notification
-│       ├── services/      # matching business logic per resource
+│       ├── routes/        # auth, workspace, board, task, comment, notification, dashboard
+│       ├── services/      # matching business logic per resource, plus dashboard.service.ts (aggregation)
 │       ├── sockets/        # index.ts (auth + rooms + presence), io.ts, rooms.ts
 │       ├── utils/         # AppError.ts, catchAsync.ts, apiResponse.ts, token.ts
 │       └── validators/    # Zod schemas per resource
@@ -113,9 +114,16 @@ Board
 - workspaceId    (ref Workspace, indexed with createdAt for "boards in this workspace")
 - name
 - description?
-- columns[]      { _id, name, order }   (embedded - columns are cheap, board-scoped, low cardinality)
+- columns[]      { _id, name, order, isDone }   (embedded - columns are cheap, board-scoped, low cardinality)
 - createdBy      (ref User)
 - createdAt / updatedAt
+
+`columns[].isDone` (added in Phase 8) is what the dashboard uses to classify a task
+as "completed" — an explicit boolean rather than matching `column.name` against
+`/done/i`, since name-matching breaks the moment someone renames "Done" to
+"Shipped" or adds a second done-ish column like "Deployed". The default column set
+marks "Done" `isDone: true` automatically; custom column names default to `false`
+and can be marked via `PATCH /api/boards/:id/columns/:columnId`.
 
 Task
 - _id
@@ -255,6 +263,8 @@ that gap; easy to loosen to MEMBER+ if that's not the intent.
 | GET    | `/api/workspaces/:id/activity` | VIEWER+ | Workspace activity feed, newest first |
 | GET    | `/api/notifications` | Bearer | Your notifications (`?unread=true` to filter), includes `unreadCount` |
 | PATCH  | `/api/notifications/:id/read` | Bearer, owner only | Mark one notification read |
+| PATCH  | `/api/boards/:id/columns/:columnId` | ADMIN+ | Rename a column and/or toggle its `isDone` flag |
+| GET    | `/api/dashboard` | Bearer | Cross-workspace stats, "My Tasks", and recent activity for the caller |
 
 Auth endpoints are rate-limited (20 requests / 15 min / IP).
 
@@ -335,13 +345,79 @@ npm run dev           # http://localhost:5173
 
 You'll need a local MongoDB instance (or use Docker below) matching `MONGO_URI`.
 
+## Seed Data
+
+```bash
+cd server
+npm run seed
+```
+
+`server/src/utils/seed.ts` clears and repopulates the database with realistic demo
+data (idempotent — safe to re-run): 3 users, 2 workspaces, 2 boards (each using the
+standard 5-column layout every board defaults to), 19 tasks with a mix of
+priorities/labels/due dates (including some intentionally overdue and some due
+soon, so the dashboard has something to show), 11 comments, 4 notifications, and 7
+activity log entries. It writes directly through the Mongoose models rather than
+making HTTP requests against a running server, since seeding data needs neither a
+server process nor a JWT.
+
+**Demo accounts** (all share the same password):
+
+| Email | Password | Website Redesign | Mobile App Launch |
+|---|---|---|---|
+| `alice@example.com` | `password123` | OWNER | ADMIN |
+| `bob@example.com` | `password123` | ADMIN | OWNER |
+| `carol@example.com` | `password123` | MEMBER | VIEWER |
+
 ## Docker
+
+**Development** (bind-mounted source, hot reload, Vite dev server):
 
 ```bash
 docker compose up
 ```
 
 Starts MongoDB, the API on `:5000`, and the client dev server on `:5173`.
+
+**Production** (multi-stage builds, no bind mounts, nginx-served static
+frontend, non-root server container):
+
+```bash
+# Generate real secrets - do not use the dev defaults in production.
+openssl rand -base64 32   # run twice, once each for JWT_ACCESS_SECRET / JWT_REFRESH_SECRET
+
+cp server/.env.example server/.env.production
+# edit server/.env.production: set the generated secrets, CLIENT_URL to your
+# real deployed origin, and MONGO_URI if not using the bundled mongo service
+
+docker compose -f docker-compose.prod.yml --env-file server/.env.production up -d --build
+```
+
+This serves the client on `:80` via nginx, which proxies `/api` and `/socket.io`
+to the server container — the browser only ever talks to one origin in
+production, sidestepping CORS entirely and letting the refresh-token cookie's
+`SameSite=Lax` policy work without cross-site complications. See
+`docker-compose.prod.yml` for the full breakdown of what's different from the dev
+compose file (no source mounts, `COOKIE_SECURE=true`, required secrets with no
+insecure fallback, a healthcheck on the server).
+
+## Deployment
+
+The Docker setup above is portable to any container host. Two realistic paths:
+
+- **Single VM / VPS**: install Docker, copy the repo, run the production compose
+  command above behind a reverse proxy (Caddy or an nginx you already run) that
+  terminates TLS and forwards to the client container's port 80.
+- **Managed platforms** (Render, Fly.io, Railway, etc.): build the `server` and
+  `client` Dockerfiles as two separate services, point `MONGO_URI` at a managed
+  MongoDB (Atlas free tier is fine for a portfolio deployment), and set
+  `CLIENT_URL` on the server to the client's real deployed URL so CORS and the
+  refresh cookie's origin checks are correct.
+
+In either case: never reuse the dev JWT secrets, always set `COOKIE_SECURE=true`
+once served over HTTPS, and set `CLIENT_URL` to the exact production origin (not
+a wildcard) since it drives both the CORS allowlist and the Socket.io CORS
+config.
 
 ## Frontend Architecture (Phase 5 additions)
 
@@ -393,6 +469,33 @@ WorkspacesPage -> WorkspaceDetailPage (boards list) -> BoardPage (Kanban)
   else the way `BoardPage`'s `columns` state is, so there's no "free" resync to
   lean on.
 
+## Performance (Phase 8)
+
+- **Dashboard is one aggregation, not five queries.** `dashboard.service.ts` uses a
+  single `Task.aggregate([...$facet])` to compute total/completed/inProgress/
+  overdue/dueSoon counts *and* the "My Tasks" preview list in one round trip to
+  MongoDB, instead of five separate `.countDocuments()`/`.find()` calls each
+  paying their own network round trip.
+- **`.lean()` on every read-only query.** Every list/read endpoint across
+  workspaces, boards, tasks, comments, notifications, and activity uses `.lean()`
+  — skipping Mongoose's hydration into full documents (change tracking, virtuals,
+  methods) for data that's only ever serialized back out as JSON. Writes still use
+  full hydrated documents where they need `.save()` or instance methods.
+- **Assignee lookups avoid populate.** Tasks store `assignee` as a raw `ObjectId`
+  rather than being populated on every list response — the frontend already has
+  the workspace's member list (`GET /api/workspaces/:id/members`) loaded once
+  per board session and looks up names client-side, instead of the API paying a
+  `$lookup`/populate cost on every task list request.
+- **Frontend: memoized Kanban rendering.** `TaskCard` and `KanbanColumn` are
+  wrapped in `React.memo`. This only pays off because of two supporting choices:
+  `reorderColumns` (Phase 5) only replaces the array reference for the source and
+  destination columns of a move, so untouched columns keep a stable `tasks` array
+  reference; and `BoardPage` now stores `selectedTaskId` instead of the full
+  `Task` object, so `onSelectTask` is a trivial `useCallback` with an empty
+  dependency array rather than a new closure every render. Together, dragging one
+  card no longer re-renders every card in every column — just the two columns
+  actually involved in the move.
+
 ## Testing
 
 ```bash
@@ -435,17 +538,28 @@ npm test
   (404 for anyone else); being added to a workspace notifies you; and the
   activity feed records board/task/move events newest-first and 404s for a
   non-member.
+- `server/tests/dashboard.test.ts`: tasks are classified completed/in-progress by
+  their column's `isDone` flag (not name-matching); an overdue task only counts
+  as overdue for its actual assignee, not for other workspace members; recent
+  activity aggregates correctly across *every* workspace the user belongs to,
+  not just one; and assigning a task to a non-member is rejected with 400.
+- `server/tests/board.test.ts` also covers the `isDone` flag directly: the
+  default board's "Done" column comes back `isDone: true` and every other
+  default column `false`; a custom-column board starts with every column
+  `isDone: false`; and `PATCH /api/boards/:id/columns/:columnId` can mark one.
 
-All seven suites use an in-memory MongoDB (`mongodb-memory-server`), so no external
+All eight suites use an in-memory MongoDB (`mongodb-memory-server`), so no external
 DB is needed to run them. The socket suite spins up a real HTTP server on an
 ephemeral port and connects with `socket.io-client`, rather than mocking the
 transport, so it's exercising the actual auth handshake and room-broadcast logic.
 
-Frontend: `cd client && npm test` runs `client/src/utils/__tests__/reorder.test.ts`
-(Vitest) — same-column reordering, cross-column moves landing at the correct index,
-and that `reorderColumns` doesn't mutate its input. This is the pure function that
-drives the Kanban drag-and-drop, extracted specifically so it's testable without
-mounting `@hello-pangea/dnd` or the full `BoardPage`.
+Frontend: `cd client && npm test` runs two Vitest suites —
+`utils/__tests__/reorder.test.ts` (same-column reordering, cross-column moves
+landing at the correct index, and that `reorderColumns` doesn't mutate its input:
+the pure function driving Kanban drag-and-drop) and
+`utils/__tests__/useDebouncedValue.test.ts` (using fake timers: no update before
+the delay elapses, updates once it does, and rapid successive changes reset the
+timer and keep only the latest value — the logic behind the board's search box).
 
 See the note at the top of this README on why none of these suites have been
 executed inside this sandbox (no network access to `npm install`).
@@ -461,11 +575,11 @@ executed inside this sandbox (no network access to `npm install`).
 | 5 | Drag-and-drop UI, optimistic updates + rollback (backend reordering already done) | ✅ Done |
 | 6 | Socket.io: rooms per workspace, task/comment events, presence | ✅ Done |
 | 7 | Notifications, activity feed, search/filter with debouncing | ✅ Done |
-| 8 | Dashboard, performance pass (`.lean()`, indexes, memoization), broader tests | ⏭ Next |
-| 9 | Seed script, production Docker hardening, final docs | Planned |
+| 8 | Dashboard, performance pass (`.lean()`, indexes, memoization), broader tests | ✅ Done |
+| 9 | Seed script, production Docker hardening, final docs | ✅ Done |
 
-Say "continue to Phase 3" (or name any phase) and I'll build it the same way: real
-models, real authorization checks, real tests, verified before moving on.
+All 9 phases are complete. See [Future Improvements](#future-improvements) below
+for what a genuinely production-bound version of this app would still need.
 
 ## Interview Questions & Answers
 
@@ -633,9 +747,76 @@ independent domains, or if a slow notification write started blocking the task
 response, I'd reach for a proper event-driven design (e.g. publish `task.created`
 to a queue, let separate consumers own activity/notifications) instead.
 
+**21. Why `$facet` instead of `Promise.all([...five separate counts])`?**
+Both approaches avoid blocking one query on another, since `Promise.all` runs
+them concurrently too — the real difference is round trips and load on Mongo.
+Five `.countDocuments()`/`.find()` calls are five separate queries the database
+has to plan and execute, each carrying its own network round trip from the app
+server. `$facet` sends the base `$match` (boardId + assignee) once and lets
+MongoDB itself run all five sub-pipelines against that already-filtered set in a
+single request/response cycle. For a dashboard that could plausibly be polled or
+loaded frequently, that's the difference between 1 round trip and 5 every time
+someone opens the page.
+
+**22. Why compute `isDone` per-board instead of a single global "done" column name?**
+Because boards aren't required to share column names — one team's board might use
+"Done", another might use "Shipped" or "Deployed", and a single board could
+reasonably have more than one done-ish column (e.g. both "Done" and "Won't Fix"
+should count as complete for dashboard purposes, "Blocked" shouldn't). Storing
+`isDone` as a per-column boolean on each board handles all of that without any
+special-casing in the dashboard query — it just collects every column across
+every board where `isDone: true` and filters tasks against that ID set. The
+alternative (a global convention like "always name it exactly 'Done'") is
+brittle and silently wrong the moment someone breaks the convention.
+
 **10. What would you change before this went to real production?**
-Add centralized structured logging (pino/winston) and request IDs, move rate-limit
-state to Redis so it works across multiple server instances, add refresh-token
-rotation with reuse detection (invalidate the whole session family if an old refresh
-token is replayed), and add integration tests for the RBAC and Socket.io layers, not
-just auth.
+A few things genuinely aren't done yet, listed honestly in
+[Future Improvements](#future-improvements) below — refresh-token rotation with
+reuse detection, centralized structured logging, Redis-backed rate limiting
+across multiple instances, and a CI pipeline chief among them. (Note: when I first
+answered this question back in Phase 2, I listed "RBAC and Socket.io test
+coverage" as missing — those exist now, added in Phases 3 and 6 respectively, so
+I've kept this answer honest as the project actually grew instead of leaving a
+stale claim in place.)
+
+## Future Improvements
+
+Honest gaps, not implemented in this repo:
+
+- **Refresh-token rotation with reuse detection.** Right now a refresh token is
+  valid for its full 7-day lifetime with no rotation — a stolen refresh token
+  works until it naturally expires. A hardened version would issue a new refresh
+  token on every use, invalidate the old one, and treat a replayed old token as a
+  signal to revoke the entire session family.
+- **Centralized structured logging** (pino/winston) with request IDs threaded
+  through each request, instead of the current bare `console.log`/`console.error`.
+- **Redis-backed rate limiting.** The current `express-rate-limit` store is
+  in-memory per process — fine for one server instance, but multiple instances
+  behind a load balancer would each track limits independently, letting an
+  attacker get N× the intended request budget by hitting different instances.
+- **CI pipeline** (GitHub Actions or similar) running lint + typecheck + both test
+  suites on every push/PR — the tests exist and are ready to run in CI, there's
+  just no workflow file wiring that up yet.
+- **Ownership transfer** for a workspace. The owner can never be removed or
+  demoted by design (Phase 3), but there's also no way to *deliberately* hand
+  ownership to someone else — a real gap if the original owner leaves the team.
+- **Rich text / mentions in comments.** Comments are plain text; the spec's
+  "someone mentions them" notification type was intentionally left out since it
+  needs `@mention` parsing that plain-text comments don't support yet.
+- **File attachments** on tasks — not part of the original spec's core feature
+  list, but a natural next feature for a Trello-style tool.
+- **E2E tests** (Playwright/Cypress) covering the full login → create workspace →
+  create board → drag a task flow end-to-end in a real browser, complementing the
+  unit/integration tests that exist today.
+
+## Screenshots
+
+Not included — generating real screenshots needs the app actually running (a
+browser rendering the live UI against a live backend), which isn't possible in
+the sandboxed environment this was built in. Once you run it locally
+(`docker compose up` or the manual setup above), the natural ones to capture for
+a portfolio README are: the Kanban board mid-drag, the notification bell dropdown,
+the dashboard with real stats, and two browser windows side-by-side showing a
+task move appearing live in both — that last one is the best evidence the
+real-time collaboration in Phase 6 actually works.
+

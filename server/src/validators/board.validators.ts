@@ -23,5 +23,13 @@ export const updateBoardSchema = z.object({
 export const addColumnSchema = z.object({
   body: z.object({
     name: z.string().trim().min(1).max(60),
+    isDone: z.boolean().optional(),
+  }),
+});
+
+export const updateColumnSchema = z.object({
+  body: z.object({
+    name: z.string().trim().min(1).max(60).optional(),
+    isDone: z.boolean().optional(),
   }),
 });

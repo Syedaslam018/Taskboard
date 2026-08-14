@@ -4,6 +4,11 @@ export interface IBoardColumn {
   _id: Types.ObjectId;
   name: string;
   order: number;
+  // Explicit flag rather than matching column.name against /done/i - name
+  // matching breaks the moment someone renames "Done" to "Shipped" or adds
+  // a second done-ish column ("Deployed"). Dashboard stats (completed vs.
+  // overdue vs. in-progress) key off this field instead.
+  isDone: boolean;
 }
 
 export interface IBoard extends Document {
@@ -20,6 +25,7 @@ export interface IBoard extends Document {
 const columnSchema = new Schema<IBoardColumn>({
   name: { type: String, required: true, trim: true, maxlength: 60 },
   order: { type: Number, required: true },
+  isDone: { type: Boolean, default: false },
 });
 
 const boardSchema = new Schema<IBoard>(

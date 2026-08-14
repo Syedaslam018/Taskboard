@@ -48,8 +48,13 @@ export const boardController = {
   }),
 
   addColumn: catchAsync(async (req: BoardScopedRequest, res) => {
-    const board = await boardService.addColumn(req.board!, req.body.name);
+    const board = await boardService.addColumn(req.board!, req.body.name, req.body.isDone);
     sendSuccess(res, { board }, "Column added successfully", 201);
+  }),
+
+  updateColumn: catchAsync(async (req: BoardScopedRequest, res) => {
+    const board = await boardService.updateColumn(req.board!, req.params.columnId, req.body);
+    sendSuccess(res, { board }, "Column updated successfully");
   }),
 
   removeColumn: catchAsync(async (req: BoardScopedRequest, res) => {

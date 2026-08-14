@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { DragDropContext, DropResult } from "@hello-pangea/dnd";
 import { useBoard } from "@/hooks/useBoards";
@@ -20,10 +20,17 @@ export default function BoardPage() {
   const { onlineUserIds } = useRealtimeBoard(boardId, board?.workspaceId);
 
   const [columns, setColumns] = useState<Record<string, Task[]>>({});
-  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  // Storing the id (not the whole Task) lets onSelectTask stay a trivial,
+  // stable useCallback with no dependency on task data - which is what
+  // lets TaskCard's React.memo actually skip re-renders. The full task
+  // object is looked up from tasksData only when the modal needs to render.
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [searchInput, setSearchInput] = useState("");
   const [priorityFilter, setPriorityFilter] = useState<TaskPriority | "">("");
   const debouncedSearch = useDebouncedValue(searchInput, 250);
+
+  const handleSelectTask = useCallback((taskId: string) => setSelectedTaskId(taskId), []);
+  const selectedTask = tasksData?.tasks.find((t) => t._id === selectedTaskId) ?? null;
 
   // Resync local column state from the server whenever fresh data arrives
   // (initial load, after a create/edit/delete, or after a move settles).
@@ -149,7 +156,7 @@ export default function BoardPage() {
                   boardId={board._id}
                   column={column}
                   tasks={filteredColumns[column._id] ?? []}
-                  onSelectTask={setSelectedTask}
+                  onSelectTask={handleSelectTask}
                   dragDisabled={isFiltering}
                 />
               ))}
@@ -161,7 +168,7 @@ export default function BoardPage() {
           boardId={board._id}
           workspaceId={board.workspaceId}
           task={selectedTask}
-          onClose={() => setSelectedTask(null)}
+          onClose={() => setSelectedTaskId(null)}
         />
       )}
     </div>

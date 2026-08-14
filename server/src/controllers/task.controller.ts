@@ -8,6 +8,7 @@ import { activityService } from "../services/activity.service";
 import { notificationService } from "../services/notification.service";
 import { ActivityType } from "../models/Activity";
 import { NotificationType } from "../models/Notification";
+import { assertIsWorkspaceMember } from "../middleware/rbac";
 import { getIO } from "../sockets/io";
 import { workspaceRoom, userRoom } from "../sockets/rooms";
 
@@ -15,6 +16,10 @@ export const taskController = {
   create: catchAsync(async (req: BoardScopedRequest, res) => {
     const { columnId, title, description, priority, assignee, labels, dueDate } = req.body;
     const workspaceId = String(req.workspace!._id);
+
+    if (assignee) {
+      assertIsWorkspaceMember(req.workspace!, assignee);
+    }
 
     const task = await taskService.create({
       boardId: String(req.board!._id),
@@ -79,6 +84,10 @@ export const taskController = {
   update: catchAsync(async (req: TaskScopedRequest, res) => {
     const workspaceId = String(req.workspace!._id);
     const previousAssignee = req.task!.assignee ? String(req.task!.assignee) : undefined;
+
+    if (req.body.assignee) {
+      assertIsWorkspaceMember(req.workspace!, req.body.assignee);
+    }
 
     const task = await taskService.update(req.task!, req.body);
 

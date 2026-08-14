@@ -2,6 +2,7 @@ import http from "http";
 import { createApp } from "./app";
 import { connectDB } from "./config/db";
 import { env } from "./config/env";
+import { initSocket } from "./sockets";
 
 async function bootstrap(): Promise<void> {
   await connectDB();
@@ -9,7 +10,7 @@ async function bootstrap(): Promise<void> {
   const app = createApp();
   const server = http.createServer(app);
 
-  // Phase 6: attach Socket.io here, e.g. initSocket(server)
+  initSocket(server);
 
   server.listen(env.port, () => {
     // eslint-disable-next-line no-console

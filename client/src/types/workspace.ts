@@ -15,3 +15,9 @@ export interface Workspace {
   createdAt: string;
   updatedAt: string;
 }
+
+export interface WorkspaceMemberWithUser {
+  user: { _id: string; name: string; email: string; avatar?: string };
+  role: WorkspaceRole;
+  joinedAt: string;
+}

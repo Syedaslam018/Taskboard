@@ -1,5 +1,5 @@
 import { Droppable, Draggable } from "@hello-pangea/dnd";
-import { useState } from "react";
+import { memo, useState } from "react";
 import { BoardColumn } from "@/types/board";
 import { Task } from "@/types/task";
 import TaskCard from "./TaskCard";
@@ -9,7 +9,10 @@ interface Props {
   boardId: string;
   column: BoardColumn;
   tasks: Task[];
-  onSelectTask: (task: Task) => void;
+  // Stable (useCallback'd in BoardPage) - passed straight through to
+  // TaskCard with no wrapping arrow function, so its identity survives
+  // across renders and React.memo on TaskCard can actually take effect.
+  onSelectTask: (taskId: string) => void;
   // When a search/priority filter is active, `tasks` is a filtered subset
   // whose array indices don't correspond to real backend positions -
   // dragging in that state would send wrong position values. Simplest safe
@@ -18,7 +21,7 @@ interface Props {
   dragDisabled?: boolean;
 }
 
-export default function KanbanColumn({ boardId, column, tasks, onSelectTask, dragDisabled }: Props) {
+function KanbanColumn({ boardId, column, tasks, onSelectTask, dragDisabled }: Props) {
   const [adding, setAdding] = useState(false);
   const [title, setTitle] = useState("");
   const createTask = useCreateTask(boardId);
@@ -52,7 +55,7 @@ export default function KanbanColumn({ boardId, column, tasks, onSelectTask, dra
           >
             {tasks.map((task, index) =>
               dragDisabled ? (
-                <TaskCard key={task._id} task={task} isDragging={false} onClick={() => onSelectTask(task)} />
+                <TaskCard key={task._id} task={task} isDragging={false} onSelect={onSelectTask} />
               ) : (
                 <Draggable draggableId={task._id} index={index} key={task._id}>
                   {(dragProvided, dragSnapshot) => (
@@ -61,7 +64,7 @@ export default function KanbanColumn({ boardId, column, tasks, onSelectTask, dra
                       {...dragProvided.draggableProps}
                       {...dragProvided.dragHandleProps}
                     >
-                      <TaskCard task={task} isDragging={dragSnapshot.isDragging} onClick={() => onSelectTask(task)} />
+                      <TaskCard task={task} isDragging={dragSnapshot.isDragging} onSelect={onSelectTask} />
                     </div>
                   )}
                 </Draggable>
@@ -121,3 +124,10 @@ export default function KanbanColumn({ boardId, column, tasks, onSelectTask, dra
     </div>
   );
 }
+
+// `reorderColumns` (utils/reorder.ts) only replaces the array reference for
+// the source and destination columns of a move - every other column keeps
+// its original `tasks` array reference. Combined with a memoized component
+// here, dragging a card from column A to column B skips re-rendering
+// columns C, D, E entirely instead of re-rendering the whole board.
+export default memo(KanbanColumn);

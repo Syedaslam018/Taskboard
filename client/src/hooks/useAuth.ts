@@ -28,7 +28,6 @@ export function useLogin() {
 export function useRegister() {
   const setSession = useAuthStore((s) => s.setSession);
   const queryClient = useQueryClient();
-  console.log("useRegister called");
   return useMutation({
     mutationFn: ({ name, email, password }: { name: string; email: string; password: string }) =>
       authService.register(name, email, password),

@@ -5,7 +5,7 @@ import { validate } from "../middleware/validate";
 import { WorkspaceRole } from "../models/Workspace";
 import { boardController } from "../controllers/board.controller";
 import { taskController } from "../controllers/task.controller";
-import { createBoardSchema, updateBoardSchema, addColumnSchema } from "../validators/board.validators";
+import { createBoardSchema, updateBoardSchema, addColumnSchema, updateColumnSchema } from "../validators/board.validators";
 import { createTaskSchema, listTasksQuerySchema } from "../validators/task.validators";
 
 const router = Router();
@@ -30,6 +30,12 @@ router.post(
   boardController.addColumn
 );
 router.delete("/:id/columns/:columnId", requireBoardRole(WorkspaceRole.ADMIN), boardController.removeColumn);
+router.patch(
+  "/:id/columns/:columnId",
+  requireBoardRole(WorkspaceRole.ADMIN),
+  validate(updateColumnSchema),
+  boardController.updateColumn
+);
 
 // Tasks nested under their board, matching the spec's
 // GET/POST /api/boards/:boardId/tasks routes.

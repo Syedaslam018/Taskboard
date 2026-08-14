@@ -62,3 +62,15 @@ export function requireWorkspaceRole(minRole: WorkspaceRole, paramName = "id") {
     }
   };
 }
+
+/**
+ * Confirms a candidate assignee is actually a member of the workspace, so a
+ * task can't be assigned to an arbitrary user ID that happens to be a valid
+ * ObjectId but has no access to the board at all.
+ */
+export function assertIsWorkspaceMember(workspace: IWorkspace, userId: string): void {
+  const isMember = workspace.members.some((m) => m.user.toString() === userId);
+  if (!isMember) {
+    throw AppError.badRequest("Assignee must be a member of this workspace");
+  }
+}

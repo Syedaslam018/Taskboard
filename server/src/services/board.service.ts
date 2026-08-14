@@ -11,11 +11,16 @@ export const boardService = {
     description?: string,
     columnNames?: string[]
   ): Promise<IBoard> {
-    const names = columnNames && columnNames.length > 0 ? columnNames : DEFAULT_COLUMNS;
+    const usingDefaults = !columnNames || columnNames.length === 0;
+    const names = usingDefaults ? DEFAULT_COLUMNS : (columnNames as string[]);
     const columns = names.map((colName, index) => ({
       _id: new Types.ObjectId(),
       name: colName,
       order: index,
+      // Only meaningful for the default column set, where "Done" is always
+      // the last one. Custom column names have no reliable way to guess
+      // which one means "done" - callers can mark one via updateColumn.
+      isDone: usingDefaults && colName === "Done",
     }));
 
     return Board.create({
@@ -49,9 +54,24 @@ export const boardService = {
     await board.deleteOne();
   },
 
-  async addColumn(board: IBoard, name: string): Promise<IBoard> {
+  async addColumn(board: IBoard, name: string, isDone = false): Promise<IBoard> {
     const nextOrder = board.columns.length > 0 ? Math.max(...board.columns.map((c) => c.order)) + 1 : 0;
-    board.columns.push({ _id: new Types.ObjectId(), name, order: nextOrder });
+    board.columns.push({ _id: new Types.ObjectId(), name, order: nextOrder, isDone });
+    await board.save();
+    return board;
+  },
+
+  async updateColumn(
+    board: IBoard,
+    columnId: string,
+    updates: { name?: string; isDone?: boolean }
+  ): Promise<IBoard> {
+    const column = board.columns.find((c) => c._id.toString() === columnId);
+    if (!column) {
+      throw AppError.notFound("Column not found on this board");
+    }
+    if (updates.name !== undefined) column.name = updates.name;
+    if (updates.isDone !== undefined) column.isDone = updates.isDone;
     await board.save();
     return board;
   },

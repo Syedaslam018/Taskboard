@@ -10,6 +10,7 @@ import boardRoutes from "./routes/board.routes";
 import taskRoutes from "./routes/task.routes";
 import commentRoutes from "./routes/comment.routes";
 import notificationRoutes from "./routes/notification.routes";
+import dashboardRoutes from "./routes/dashboard.routes";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler";
 
 export function createApp(): Application {
@@ -38,6 +39,7 @@ export function createApp(): Application {
   app.use("/api/tasks", taskRoutes);
   app.use("/api/comments", commentRoutes);
   app.use("/api/notifications", notificationRoutes);
+  app.use("/api/dashboard", dashboardRoutes);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

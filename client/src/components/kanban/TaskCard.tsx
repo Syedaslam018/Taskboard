@@ -1,18 +1,25 @@
+import { memo } from "react";
 import { Task } from "@/types/task";
 import PriorityBadge from "./PriorityBadge";
 
 interface Props {
   task: Task;
   isDragging: boolean;
-  onClick: () => void;
+  // Takes the task's id, not the task itself, and is expected to be a
+  // stable (useCallback'd) reference from the parent - see KanbanColumn/
+  // BoardPage. That's what lets React.memo below actually skip re-rendering
+  // cards on a large board when an unrelated task changes: if this prop
+  // were `() => onSelectTask(task)` defined inline in the parent's render,
+  // it would be a new function identity every render regardless of memo.
+  onSelect: (taskId: string) => void;
 }
 
-export default function TaskCard({ task, isDragging, onClick }: Props) {
+function TaskCard({ task, isDragging, onSelect }: Props) {
   const isOverdue = task.dueDate ? new Date(task.dueDate) < new Date() : false;
 
   return (
     <div
-      onClick={onClick}
+      onClick={() => onSelect(task._id)}
       className={`cursor-pointer rounded-lg bg-white p-3 shadow-sm ring-1 ring-slate-200 transition hover:ring-brand-300 ${
         isDragging ? "rotate-1 shadow-md" : ""
       }`}
@@ -34,3 +41,10 @@ export default function TaskCard({ task, isDragging, onClick }: Props) {
     </div>
   );
 }
+
+// Only re-renders when this specific task's props actually change - moving
+// or editing one card on a large board no longer re-renders every other
+// card in every column, since `task` is a stable object reference for
+// anything that didn't change (see BoardPage/reorderColumns) and `onSelect`
+// is a stable callback (see KanbanColumn).
+export default memo(TaskCard);

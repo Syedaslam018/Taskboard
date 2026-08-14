@@ -32,7 +32,13 @@ export function useUpdateTask(boardId: string) {
       updates,
     }: {
       taskId: string;
-      updates: { title?: string; description?: string; priority?: TaskPriority; dueDate?: string | null };
+      updates: {
+        title?: string;
+        description?: string;
+        priority?: TaskPriority;
+        dueDate?: string | null;
+        assignee?: string | null;
+      };
     }) => taskService.update(taskId, updates),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["tasks", boardId] }),
   });

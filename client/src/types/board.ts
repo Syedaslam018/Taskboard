@@ -2,6 +2,7 @@ export interface BoardColumn {
   _id: string;
   name: string;
   order: number;
+  isDone: boolean;
 }
 
 export interface Board {
