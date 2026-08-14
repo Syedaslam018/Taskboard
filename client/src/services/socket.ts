@@ -3,12 +3,14 @@ import { useAuthStore } from "@/stores/authStore";
 
 let socket: Socket | null = null;
 
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || undefined;
+
 export function getSocket(): Socket | null {
   return socket;
 }
 
 function connect(token: string): void {
-  socket = io("/", {
+  socket = io(SOCKET_URL, {
     path: "/socket.io",
     auth: { token },
     withCredentials: true,
