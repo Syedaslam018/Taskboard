@@ -1,5 +1,6 @@
 import { useCurrentUser, useLogout } from "@/hooks/useAuth";
 import { Link } from "react-router-dom";
+import NotificationBell from "@/components/notifications/NotificationBell";
 
 export default function DashboardPage() {
   const { data: user, isLoading } = useCurrentUser();
@@ -9,12 +10,15 @@ export default function DashboardPage() {
     <div className="min-h-screen bg-slate-50">
       <header className="flex items-center justify-between border-b border-slate-200 bg-white px-6 py-4">
         <h1 className="text-lg font-semibold text-slate-900">TaskBoard</h1>
-        <button
-          onClick={() => logout.mutate()}
-          className="rounded-lg px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100"
-        >
-          Log out
-        </button>
+        <div className="flex items-center gap-2">
+          <NotificationBell />
+          <button
+            onClick={() => logout.mutate()}
+            className="rounded-lg px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100"
+          >
+            Log out
+          </button>
+        </div>
       </header>
       <main className="mx-auto max-w-5xl px-6 py-8">
         {isLoading ? (
@@ -37,7 +41,7 @@ export default function DashboardPage() {
               </Link>
             </p>
             <p className="mt-2 text-xs text-slate-400">
-              Notifications, activity feed, and the stats above land in Phase 7-8 of the build.
+              Full dashboard stats (My Tasks, Due Soon, Overdue, Completed) land in Phase 8.
             </p>
           </>
         )}

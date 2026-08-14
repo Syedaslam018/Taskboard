@@ -21,6 +21,7 @@ interface UpdateTaskInput {
   description?: string;
   priority?: TaskPriority;
   dueDate?: string | null;
+  assignee?: string | null;
 }
 
 export const taskService = {

@@ -4,6 +4,8 @@ import { requireWorkspaceRole } from "../middleware/rbac";
 import { validate } from "../middleware/validate";
 import { WorkspaceRole } from "../models/Workspace";
 import { workspaceController } from "../controllers/workspace.controller";
+import { boardController } from "../controllers/board.controller";
+import { activityController } from "../controllers/activity.controller";
 import {
   createWorkspaceSchema,
   updateWorkspaceSchema,
@@ -19,6 +21,9 @@ router.post("/", validate(createWorkspaceSchema), workspaceController.create);
 router.get("/", workspaceController.list);
 
 router.get("/:id", requireWorkspaceRole(WorkspaceRole.VIEWER), workspaceController.getOne);
+router.get("/:id/boards", requireWorkspaceRole(WorkspaceRole.VIEWER), boardController.listForWorkspace);
+router.get("/:id/members", requireWorkspaceRole(WorkspaceRole.VIEWER), workspaceController.listMembers);
+router.get("/:id/activity", requireWorkspaceRole(WorkspaceRole.VIEWER), activityController.list);
 router.patch(
   "/:id",
   requireWorkspaceRole(WorkspaceRole.ADMIN),

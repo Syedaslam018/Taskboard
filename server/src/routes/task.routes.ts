@@ -4,7 +4,9 @@ import { requireTaskRole } from "../middleware/taskAccess";
 import { validate } from "../middleware/validate";
 import { WorkspaceRole } from "../models/Workspace";
 import { taskController } from "../controllers/task.controller";
+import { commentController } from "../controllers/comment.controller";
 import { updateTaskSchema, moveTaskSchema } from "../validators/task.validators";
+import { createCommentSchema } from "../validators/comment.validators";
 
 const router = Router();
 
@@ -26,6 +28,16 @@ router.patch(
   requireTaskRole(WorkspaceRole.MEMBER),
   validate(moveTaskSchema),
   taskController.move
+);
+
+// Comments nested under their task, matching the spec's
+// GET/POST /api/tasks/:taskId/comments routes.
+router.get("/:id/comments", requireTaskRole(WorkspaceRole.VIEWER), commentController.list);
+router.post(
+  "/:id/comments",
+  requireTaskRole(WorkspaceRole.MEMBER),
+  validate(createCommentSchema),
+  commentController.create
 );
 
 export default router;

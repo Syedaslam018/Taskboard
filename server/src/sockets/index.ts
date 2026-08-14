@@ -5,7 +5,7 @@ import { assertWorkspaceAccess } from "../middleware/rbac";
 import { WorkspaceRole } from "../models/Workspace";
 import { env } from "../config/env";
 import { setIO } from "./io";
-import { workspaceRoom } from "./rooms";
+import { workspaceRoom, userRoom } from "./rooms";
 
 interface AuthedSocket extends Socket {
   userId?: string;
@@ -75,6 +75,11 @@ export function initSocket(server: http.Server): SocketIOServer {
   });
 
   io.on("connection", (socket: AuthedSocket) => {
+    // Every authenticated socket automatically gets its own private
+    // notification channel - no explicit join needed, since it's scoped to
+    // exactly the user the JWT already proved they are.
+    socket.join(userRoom(socket.userId as string));
+
     socket.on("workspace:join", async (workspaceId: string, ack?: (res: JoinAck) => void) => {
       try {
         // Same membership check as every REST route for this workspace -

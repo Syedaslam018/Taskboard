@@ -5,6 +5,8 @@ import { BoardScopedRequest } from "../middleware/boardAccess";
 import { AuthenticatedRequest } from "../middleware/auth";
 import { assertWorkspaceAccess, WorkspaceScopedRequest } from "../middleware/rbac";
 import { WorkspaceRole } from "../models/Workspace";
+import { activityService } from "../services/activity.service";
+import { ActivityType } from "../models/Activity";
 
 export const boardController = {
   // POST /api/boards - workspaceId comes from the body, so membership is
@@ -14,6 +16,15 @@ export const boardController = {
     await assertWorkspaceAccess(workspaceId, req.userId as string, WorkspaceRole.ADMIN);
 
     const board = await boardService.create(workspaceId, req.userId as string, name, description, columns);
+
+    await activityService.record({
+      workspaceId,
+      actor: req.userId as string,
+      type: ActivityType.BOARD_CREATED,
+      message: `${req.authUser!.name} created the board "${board.name}"`,
+      metadata: { boardId: String(board._id) },
+    });
+
     sendSuccess(res, { board }, "Board created successfully", 201);
   }),
 

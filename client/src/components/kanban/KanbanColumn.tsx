@@ -10,9 +10,15 @@ interface Props {
   column: BoardColumn;
   tasks: Task[];
   onSelectTask: (task: Task) => void;
+  // When a search/priority filter is active, `tasks` is a filtered subset
+  // whose array indices don't correspond to real backend positions -
+  // dragging in that state would send wrong position values. Simplest safe
+  // answer: disable dragging while filtered, rather than risk corrupting
+  // order. See BoardPage.tsx.
+  dragDisabled?: boolean;
 }
 
-export default function KanbanColumn({ boardId, column, tasks, onSelectTask }: Props) {
+export default function KanbanColumn({ boardId, column, tasks, onSelectTask, dragDisabled }: Props) {
   const [adding, setAdding] = useState(false);
   const [title, setTitle] = useState("");
   const createTask = useCreateTask(boardId);
@@ -35,7 +41,7 @@ export default function KanbanColumn({ boardId, column, tasks, onSelectTask }: P
         <span className="text-xs text-slate-400">{tasks.length}</span>
       </div>
 
-      <Droppable droppableId={column._id}>
+      <Droppable droppableId={column._id} isDropDisabled={dragDisabled}>
         {(provided, snapshot) => (
           <div
             ref={provided.innerRef}
@@ -44,15 +50,23 @@ export default function KanbanColumn({ boardId, column, tasks, onSelectTask }: P
               snapshot.isDraggingOver ? "bg-brand-50" : ""
             }`}
           >
-            {tasks.map((task, index) => (
-              <Draggable draggableId={task._id} index={index} key={task._id}>
-                {(dragProvided, dragSnapshot) => (
-                  <div ref={dragProvided.innerRef} {...dragProvided.draggableProps} {...dragProvided.dragHandleProps}>
-                    <TaskCard task={task} isDragging={dragSnapshot.isDragging} onClick={() => onSelectTask(task)} />
-                  </div>
-                )}
-              </Draggable>
-            ))}
+            {tasks.map((task, index) =>
+              dragDisabled ? (
+                <TaskCard key={task._id} task={task} isDragging={false} onClick={() => onSelectTask(task)} />
+              ) : (
+                <Draggable draggableId={task._id} index={index} key={task._id}>
+                  {(dragProvided, dragSnapshot) => (
+                    <div
+                      ref={dragProvided.innerRef}
+                      {...dragProvided.draggableProps}
+                      {...dragProvided.dragHandleProps}
+                    >
+                      <TaskCard task={task} isDragging={dragSnapshot.isDragging} onClick={() => onSelectTask(task)} />
+                    </div>
+                  )}
+                </Draggable>
+              )
+            )}
             {provided.placeholder}
           </div>
         )}

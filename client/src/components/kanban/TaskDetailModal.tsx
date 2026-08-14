@@ -3,24 +3,28 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Task } from "@/types/task";
 import { useUpdateTask, useDeleteTask } from "@/hooks/useTasks";
+import { useWorkspaceMembers } from "@/hooks/useWorkspaceMembers";
 
 const schema = z.object({
   title: z.string().min(1, "Title is required"),
   description: z.string().optional(),
   priority: z.enum(["LOW", "MEDIUM", "HIGH", "URGENT"]),
   dueDate: z.string().optional(),
+  assignee: z.string().optional(),
 });
 type FormValues = z.infer<typeof schema>;
 
 interface Props {
   boardId: string;
+  workspaceId: string;
   task: Task;
   onClose: () => void;
 }
 
-export default function TaskDetailModal({ boardId, task, onClose }: Props) {
+export default function TaskDetailModal({ boardId, workspaceId, task, onClose }: Props) {
   const updateTask = useUpdateTask(boardId);
   const deleteTask = useDeleteTask(boardId);
+  const { data: members } = useWorkspaceMembers(workspaceId);
   const {
     register,
     handleSubmit,
@@ -32,6 +36,7 @@ export default function TaskDetailModal({ boardId, task, onClose }: Props) {
       description: task.description ?? "",
       priority: task.priority,
       dueDate: task.dueDate ? task.dueDate.slice(0, 10) : "",
+      assignee: task.assignee ?? "",
     },
   });
 
@@ -43,6 +48,7 @@ export default function TaskDetailModal({ boardId, task, onClose }: Props) {
         description: values.description || undefined,
         priority: values.priority,
         dueDate: values.dueDate ? new Date(values.dueDate).toISOString() : null,
+        assignee: values.assignee || null,
       },
     });
     onClose();
@@ -95,6 +101,20 @@ export default function TaskDetailModal({ boardId, task, onClose }: Props) {
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
               />
             </div>
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">Assignee</label>
+            <select
+              {...register("assignee")}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
+            >
+              <option value="">Unassigned</option>
+              {members?.map((m) => (
+                <option key={m.user._id} value={m.user._id}>
+                  {m.user.name}
+                </option>
+              ))}
+            </select>
           </div>
           <div className="flex items-center justify-between pt-2">
             <button

@@ -12,7 +12,12 @@ export interface IUser extends Document {
 
 const userSchema = new Schema<IUser>(
   {
-    name: { type: String, required: true, trim: true, maxlength: 80 },
+    name: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: 80,
+    },
     email: {
       type: String,
       required: true,
@@ -21,18 +26,27 @@ const userSchema = new Schema<IUser>(
       trim: true,
       index: true,
     },
-    passwordHash: { type: String, required: true, select: false },
-    avatar: { type: String },
+    passwordHash: {
+      type: String,
+      required: true,
+      select: false,
+    },
+    avatar: {
+      type: String,
+    },
   },
   { timestamps: true }
 );
 
-// toJSON transform strips the password hash from every serialized response,
-// so controllers can never accidentally leak it even if they forget to omit it.
+// Remove sensitive fields from JSON responses.
 userSchema.set("toJSON", {
   transform: (_doc, ret) => {
-    const { passwordHash, __v, ...user } = ret;
-    return user;
+    const result = ret as unknown as Record<string, unknown>;
+
+    delete result.passwordHash;
+    delete result.__v;
+
+    return result;
   },
 });
 

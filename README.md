@@ -3,13 +3,12 @@
 A Trello/Jira-inspired collaborative project management app: workspaces, boards, tasks,
 real-time updates via Socket.io, and role-based access control.
 
-> **Status:** This repo currently implements **Phase 1 (project setup), Phase 2
-> (authentication), Phase 3 (workspaces + RBAC), Phase 4 (boards, columns, tasks
-> CRUD), Phase 5 (drag-and-drop UI with optimistic updates), and Phase 6 (Socket.io
-> real-time collaboration + comments)** end-to-end, each with a test suite. Phases
-> 7–9 (notifications, activity feed, search/filter, dashboard,
-> Docker/seed/prod hardening) are scaffolded as clear extension points (see
-> `server/src/app.ts` route comments) and are next — see [Roadmap](#roadmap).
+> **Status:** This repo currently implements **Phases 1–7**: project setup,
+> authentication, workspaces + RBAC, boards/columns/tasks CRUD, drag-and-drop UI
+> with optimistic updates, Socket.io real-time collaboration + comments, and
+> notifications/activity feed/search — each with a test suite. Phase 8 (dashboard
+> stats, performance pass, broader test coverage) and Phase 9 (seed script,
+> production Docker hardening) are what's left — see [Roadmap](#roadmap).
 >
 > Note on test execution: this sandbox has no network access, so `npm install`
 > can't run here and the test suites below have **not been executed in this
@@ -56,21 +55,24 @@ point already marked).
 project-root/
 ├── client/               # React + TS + Vite
 │   └── src/
-│       ├── components/kanban/  # KanbanColumn, TaskCard, TaskDetailModal, PriorityBadge
+│       ├── components/kanban/       # KanbanColumn, TaskCard, TaskDetailModal, PriorityBadge
+│       ├── components/notifications/  # NotificationBell
+│       ├── components/activity/     # ActivityFeed
 │       ├── pages/         # Login/Register/Dashboard, Workspaces(Detail)Page, BoardPage
-│       ├── hooks/         # useAuth, useWorkspaces, useBoards, useTasks, useRealtimeBoard, useBootstrapAuth
+│       ├── hooks/         # useAuth, useWorkspaces, useBoards, useTasks, useRealtimeBoard,
+│       │                    useBootstrapAuth, useNotifications, useActivity, useWorkspaceMembers
 │       ├── services/      # api.ts (axios + refresh interceptor), socket.ts, *Service.ts per resource
 │       ├── stores/        # authStore.ts (Zustand)
-│       ├── utils/         # reorder.ts (pure DnD reorder logic, unit tested)
+│       ├── utils/         # reorder.ts, useDebouncedValue.ts (both unit tested)
 │       ├── types/
 │       └── router/
 ├── server/                # Express + TS
 │   └── src/
 │       ├── config/        # env.ts, db.ts
-│       ├── controllers/   # auth, workspace, board, task, comment
+│       ├── controllers/   # auth, workspace, board, task, comment, notification, activity
 │       ├── middleware/    # auth, rbac, boardAccess, taskAccess, commentAccess, validate, errorHandler
-│       ├── models/        # User, Workspace, Board, Task, Comment
-│       ├── routes/        # auth, workspace, board, task, comment
+│       ├── models/        # User, Workspace, Board, Task, Comment, Notification, Activity
+│       ├── routes/        # auth, workspace, board, task, comment, notification
 │       ├── services/      # matching business logic per resource
 │       ├── sockets/        # index.ts (auth + rooms + presence), io.ts, rooms.ts
 │       ├── utils/         # AppError.ts, catchAsync.ts, apiResponse.ts, token.ts
@@ -141,8 +143,31 @@ Comment
 - createdAt / updatedAt
 ```
 
-Phase 7+ adds `Notification` and `Activity`, with the indexes called out in the
-original spec (`userId+read`, `workspaceId+createdAt`).
+```
+Notification
+- _id
+- user        (recipient, ref User, indexed with read+createdAt for the bell icon's query)
+- type        TASK_ASSIGNED | TASK_MOVED | COMMENT_ADDED | MEMBER_ADDED
+- message     precomputed human-readable line
+- workspaceId (ref Workspace)
+- taskId?     (ref Task)
+- read        boolean, default false
+- createdAt / updatedAt
+
+Activity
+- _id
+- workspaceId (ref Workspace, indexed with createdAt for the feed's only query)
+- actor       (ref User)
+- type        TASK_CREATED | TASK_MOVED | TASK_DELETED | COMMENT_ADDED | MEMBER_ADDED | BOARD_CREATED
+- message     precomputed human-readable line
+- metadata?   loosely-typed extra context (taskId, boardId, etc.)
+- createdAt
+```
+
+Both store a precomputed `message` string rather than re-deriving it from
+`metadata` on every read — the activity feed and notification bell are read far
+more often than these are written, so paying the (tiny) cost of building the
+sentence once at write time is the right trade.
 
 ### IDOR-safe access chains
 
@@ -226,6 +251,10 @@ that gap; easy to loosen to MEMBER+ if that's not the intent.
 | POST   | `/api/tasks/:id/comments` | MEMBER+ | Add a comment (broadcasts `comment:created`) |
 | PATCH  | `/api/comments/:id` | VIEWER+, author only | Edit your own comment |
 | DELETE | `/api/comments/:id` | VIEWER+, author only | Delete your own comment |
+| GET    | `/api/workspaces/:id/members` | VIEWER+ | Populated member list (name/email/avatar) — used for the assignee picker |
+| GET    | `/api/workspaces/:id/activity` | VIEWER+ | Workspace activity feed, newest first |
+| GET    | `/api/notifications` | Bearer | Your notifications (`?unread=true` to filter), includes `unreadCount` |
+| PATCH  | `/api/notifications/:id/read` | Bearer, owner only | Mark one notification read |
 
 Auth endpoints are rate-limited (20 requests / 15 min / IP).
 
@@ -240,14 +269,16 @@ const socket = io("/", { path: "/socket.io", auth: { token: accessToken } });
 ```
 
 A connection with no token, or an expired/invalid one, is rejected before
-`connection` fires.
+`connection` fires. Every authenticated socket also auto-joins a private
+`user:{id}` room on connect — no explicit join needed, since it's scoped to
+exactly the user the JWT already proved they are.
 
 | Client emits | Payload | Effect |
 |---|---|---|
 | `workspace:join` | `workspaceId`, optional ack callback | Joins `workspace:{id}` room *if* the caller is a member (same `assertWorkspaceAccess` check as REST); ack reports `{ success, message? }` |
 | `workspace:leave` | `workspaceId` | Leaves the room, updates presence |
 
-| Server emits (to `workspace:{id}`) | Payload | Fired by |
+| Server emits (to `workspace:{id}` unless noted) | Payload | Fired by |
 |---|---|---|
 | `task:created` | the new task | `POST /api/boards/:id/tasks` |
 | `task:updated` | the updated task | `PATCH /api/tasks/:id` |
@@ -257,9 +288,7 @@ A connection with no token, or an expired/invalid one, is rejected before
 | `member:added` | `{ workspaceId, email, role }` | `POST /api/workspaces/:id/members` |
 | `member:removed` | `{ workspaceId, userId }` | `DELETE /api/workspaces/:id/members/:userId` |
 | `user:online` / `user:offline` | `{ userId, workspaceId, onlineUserIds }` | Join/leave/disconnect |
-
-`notification:new` is defined in the spec but not yet emitted — there's no
-`Notification` model until Phase 7, so there's nothing to broadcast yet.
+| `notification:new` *(to `user:{recipientId}`, not the workspace room)* | the new `Notification` document | Task assigned, task moved (to the assignee), comment added (to the assignee/creator), member added |
 
 **Frontend integration**: `client/src/services/socket.ts` keeps a single socket
 connected for as long as an access token exists (subscribed to the Zustand auth
@@ -269,6 +298,10 @@ workspace room while the board is open and applies incoming task events directly
 to the `["tasks", boardId]` React Query cache — which `BoardPage`'s existing
 `useEffect` then turns back into the per-column UI state automatically, so a
 teammate's drag-and-drop move shows up live with no extra merge logic.
+`useNotifications` listens on the personal `user:{id}` channel independently of
+which board is open, and simply invalidates the notifications query on
+`notification:new` — the bell icon's badge count updates live from anywhere in
+the app, not just while a specific board is mounted.
 
 ## Environment Variables
 
@@ -336,6 +369,30 @@ WorkspacesPage -> WorkspaceDetailPage (boards list) -> BoardPage (Kanban)
   already does, for no real benefit — local state already resyncs automatically once
   the mutation settles.
 
+## Frontend Architecture (Phase 7 additions)
+
+- **Search/filter vs. drag-and-drop**: the whole board's tasks are already loaded
+  client-side for drag-and-drop to work, so search and priority filtering happen
+  against that same data — debounced (`useDebouncedValue`, 250ms) purely to avoid
+  re-filtering on every keystroke on a large board, not because it's a network
+  request. When a filter narrows the visible set, `KanbanColumn` disables dragging
+  entirely (`isDropDisabled` + rendering plain `TaskCard`s instead of `Draggable`s)
+  rather than risk it: a filtered subset's array indices don't correspond to real
+  backend positions, so a drag during filtering could silently send the wrong
+  `position` to `PATCH /api/tasks/:id/move`.
+- **Notifications are workspace-agnostic**: `useNotifications` listens on the
+  personal `user:{id}` socket channel (auto-joined on connect) rather than on
+  whichever workspace room happens to be open, so the bell's unread badge updates
+  live no matter which page you're on — unlike `useRealtimeBoard`, which is scoped
+  to one board.
+- **Optimistic mark-as-read**: `useMarkNotificationRead` flips `read: true` and
+  decrements the unread count in the cache immediately (`onMutate`), rolling back
+  via the snapshotted previous state if the request fails (`onError`) — the same
+  snapshot-and-restore pattern the task drag-and-drop deliberately avoids, used
+  here instead because a notification's cache shape isn't re-derived from anything
+  else the way `BoardPage`'s `columns` state is, so there's no "free" resync to
+  lean on.
+
 ## Testing
 
 ```bash
@@ -372,8 +429,14 @@ npm test
   room receives `task:created` when a task is created over REST; and — the
   negative case that actually proves room isolation — a socket that never
   joined does **not** receive that same event.
+- `server/tests/notification.test.ts`: assigning a task to someone else on
+  creation notifies them (and shows up with `unreadCount: 1`); self-assignment
+  does **not** notify; marking a notification read only works for its owner
+  (404 for anyone else); being added to a workspace notifies you; and the
+  activity feed records board/task/move events newest-first and 404s for a
+  non-member.
 
-All six suites use an in-memory MongoDB (`mongodb-memory-server`), so no external
+All seven suites use an in-memory MongoDB (`mongodb-memory-server`), so no external
 DB is needed to run them. The socket suite spins up a real HTTP server on an
 ephemeral port and connects with `socket.io-client`, rather than mocking the
 transport, so it's exercising the actual auth handshake and room-broadcast logic.
@@ -397,8 +460,8 @@ executed inside this sandbox (no network access to `npm install`).
 | 4 | Boards, Columns, Tasks CRUD, IDOR-safe workspace scoping | ✅ Done |
 | 5 | Drag-and-drop UI, optimistic updates + rollback (backend reordering already done) | ✅ Done |
 | 6 | Socket.io: rooms per workspace, task/comment events, presence | ✅ Done |
-| 7 | Notifications, activity feed, search/filter with debouncing | ⏭ Next |
-| 8 | Dashboard, performance pass (`.lean()`, indexes, memoization), broader tests | Planned |
+| 7 | Notifications, activity feed, search/filter with debouncing | ✅ Done |
+| 8 | Dashboard, performance pass (`.lean()`, indexes, memoization), broader tests | ⏭ Next |
 | 9 | Seed script, production Docker hardening, final docs | Planned |
 
 Say "continue to Phase 3" (or name any phase) and I'll build it the same way: real
@@ -547,6 +610,28 @@ connections for that workspace has actually disconnected — `disconnect` only
 removes that one `socketId`, and the "did they go offline" broadcast only fires
 once their per-user `Set` is empty. It's a small amount of extra bookkeeping for a
 noticeably less buggy presence indicator.
+
+**19. Why disable drag-and-drop instead of just letting search filter the board?**
+Because the drag-and-drop code sends `position` as a plain array index
+(`destination.index` from `@hello-pangea/dnd`), and that index only means "the
+correct slot" when the array it's computed against is the *complete, real* column.
+If search narrowed a column to 2 of its 15 tasks and I dragged the second one to
+index 0, the backend would receive "put this at position 0" and silently misplace
+it relative to the 13 hidden tasks. Disabling drag while filtered is a small UX
+cost for avoiding data corruption; the alternative (mapping filtered indices back
+to true indices before sending) is solvable but adds real complexity for a
+lower-priority interaction.
+
+**20. Why do activity and notification writes happen inline in the controller instead of an event bus / message queue?**
+Scale and team size. At this app's scale, a task creation touching three things
+(the task write, an activity record, maybe a notification) is three fast Mongo
+writes in one request — an event bus would add operational complexity (a broker,
+retry/dead-letter handling, eventual-consistency bugs) without a real throughput
+problem to justify it. The tradeoff is coupling: `task.controller.ts` has to know
+about activity and notifications directly. If this were a larger team working on
+independent domains, or if a slow notification write started blocking the task
+response, I'd reach for a proper event-driven design (e.g. publish `task.created`
+to a queue, let separate consumers own activity/notifications) instead.
 
 **10. What would you change before this went to real production?**
 Add centralized structured logging (pino/winston) and request IDs, move rate-limit

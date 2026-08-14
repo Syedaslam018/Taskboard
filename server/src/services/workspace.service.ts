@@ -26,6 +26,22 @@ export const workspaceService = {
       .lean();
   },
 
+  /**
+   * Populated member list (name/email/avatar), for UI that needs to show
+   * who's who - e.g. an assignee picker or "added by Sarah" notification
+   * text - as opposed to listForUser/getOne which return raw member IDs.
+   * Re-queries by ID with .populate() rather than calling .populate() on the
+   * already-hydrated document, since Mongoose's typing for the latter is
+   * awkward to express correctly without a compiler on hand to verify it.
+   */
+  async listMembersWithUsers(workspace: IWorkspace) {
+    const populated = await Workspace.findById(workspace._id)
+      .select("members")
+      .populate("members.user", "name email avatar")
+      .lean();
+    return populated?.members ?? [];
+  },
+
   async update(workspace: IWorkspace, updates: { name?: string; description?: string }): Promise<IWorkspace> {
     if (updates.name !== undefined) workspace.name = updates.name;
     if (updates.description !== undefined) workspace.description = updates.description;
@@ -38,7 +54,11 @@ export const workspaceService = {
     // Phase 4+: cascade-delete boards/tasks/comments belonging to this workspace.
   },
 
-  async addMember(workspace: IWorkspace, email: string, role: WorkspaceRole): Promise<IWorkspace> {
+  async addMember(
+    workspace: IWorkspace,
+    email: string,
+    role: WorkspaceRole
+  ): Promise<{ workspace: IWorkspace; addedUserId: string }> {
     const user = await User.findOne({ email }).lean();
     if (!user) {
       throw AppError.notFound("No user found with that email");
@@ -51,7 +71,7 @@ export const workspaceService = {
 
     workspace.members.push({ user: user._id, role, joinedAt: new Date() });
     await workspace.save();
-    return workspace;
+    return { workspace, addedUserId: user._id.toString() };
   },
 
   /**

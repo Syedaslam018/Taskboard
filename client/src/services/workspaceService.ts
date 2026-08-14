@@ -1,5 +1,5 @@
 import { api } from "./api";
-import { Workspace } from "@/types/workspace";
+import { Workspace, WorkspaceMemberWithUser } from "@/types/workspace";
 
 export const workspaceService = {
   async list() {
@@ -16,5 +16,11 @@ export const workspaceService = {
   async getOne(id: string) {
     const { data } = await api.get<{ data: { workspace: Workspace } }>(`/workspaces/${id}`);
     return data.data.workspace;
+  },
+  async listMembers(id: string) {
+    const { data } = await api.get<{ data: { members: WorkspaceMemberWithUser[] } }>(
+      `/workspaces/${id}/members`
+    );
+    return data.data.members;
   },
 };
