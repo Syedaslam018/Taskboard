@@ -70,12 +70,15 @@ export const taskService = {
     if (filters.columnId) query.columnId = new Types.ObjectId(filters.columnId);
     if (filters.label) query.labels = filters.label;
     if (filters.search) {
-      // Case-insensitive partial match on title/description. A dedicated
-      // text index would scale better for large boards; fine for portfolio scale.
-      query.$or = [
-        { title: { $regex: filters.search, $options: "i" } },
-        { description: { $regex: filters.search, $options: "i" } },
-      ];
+      // Sanitize search input to prevent ReDoS attacks. Only allow safe characters
+      // and limit length to prevent expensive regex patterns.
+      const sanitized = filters.search.slice(0, 50).replace(/[^a-zA-Z0-9\s\-_]/g, "");
+      if (sanitized.length >= 2) {
+        query.$or = [
+          { title: { $regex: sanitized, $options: "i" } },
+          { description: { $regex: sanitized, $options: "i" } },
+        ];
+      }
     }
 
     const page = filters.page && filters.page > 0 ? filters.page : 1;
