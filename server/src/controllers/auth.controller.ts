@@ -9,7 +9,7 @@ import { AuthenticatedRequest } from "../middleware/auth";
 const REFRESH_COOKIE_OPTIONS = {
   httpOnly: true,
   secure: env.cookieSecure,
-  sameSite: "none" as const,
+  sameSite: "lax" as const,
   path: "/api/auth",
   maxAge: 7 * 24 * 60 * 60 * 1000,
 };
