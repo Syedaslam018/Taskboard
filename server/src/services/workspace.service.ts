@@ -50,8 +50,31 @@ export const workspaceService = {
   },
 
   async remove(workspace: IWorkspace): Promise<void> {
+    // Cascade-delete all workspace-related data: boards → tasks → comments,
+    // plus activities and notifications scoped to this workspace.
+    const { Board } = await import("../models/Board");
+    const { Task } = await import("../models/Task");
+    const { Comment } = await import("../models/Comment");
+    const { Activity } = await import("../models/Activity");
+    const { Notification } = await import("../models/Notification");
+
+    // Find all boards in this workspace
+    const boards = await Board.find({ workspaceId: workspace._id }).select("_id").lean();
+    const boardIds = boards.map((b) => b._id);
+
+    // Find all tasks in those boards
+    const taskIds = await Task.find({ boardId: { $in: boardIds } }).distinct("_id");
+
+    // Delete in dependency order: comments → tasks → boards
+    await Comment.deleteMany({ taskId: { $in: taskIds } });
+    await Task.deleteMany({ boardId: { $in: boardIds } });
+    await Board.deleteMany({ workspaceId: workspace._id });
+
+    // Delete activities and notifications for this workspace
+    await Activity.deleteMany({ workspaceId: workspace._id });
+    await Notification.deleteMany({ workspaceId: workspace._id });
+
     await workspace.deleteOne();
-    // Phase 4+: cascade-delete boards/tasks/comments belonging to this workspace.
   },
 
   async addMember(

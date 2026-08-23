@@ -48,9 +48,23 @@ export const boardService = {
   },
 
   async remove(board: IBoard): Promise<void> {
-    // Cascade-delete tasks so the board doesn't leave orphaned rows behind -
-    // one bulk delete rather than N individual deletes.
+    // Cascade-delete all related data to prevent orphans. Order matters:
+    // comments reference tasks, so delete comments first, then tasks, then board.
+    const { Comment } = await import("../models/Comment");
+    const { Activity } = await import("../models/Activity");
+    const { Notification } = await import("../models/Notification");
+
+    // Delete all comments on tasks in this board
+    const taskIds = await Task.find({ boardId: board._id }).distinct("_id");
+    await Comment.deleteMany({ taskId: { $in: taskIds } });
+
+    // Delete all tasks in this board
     await Task.deleteMany({ boardId: board._id });
+
+    // Delete activities and notifications related to this board
+    await Activity.deleteMany({ "metadata.boardId": String(board._id) });
+    await Notification.deleteMany({ workspaceId: board.workspaceId, taskId: { $in: taskIds } });
+
     await board.deleteOne();
   },
 

@@ -3,6 +3,7 @@ import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
 import cookieParser from "cookie-parser";
+import rateLimit from "express-rate-limit";
 import { env } from "./config/env";
 import authRoutes from "./routes/auth.routes";
 import workspaceRoutes from "./routes/workspace.routes";
@@ -12,6 +13,23 @@ import commentRoutes from "./routes/comment.routes";
 import notificationRoutes from "./routes/notification.routes";
 import dashboardRoutes from "./routes/dashboard.routes";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler";
+
+// Rate limiter configuration - protects against brute force and DoS
+const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // Limit each IP to 100 requests per windowMs
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: "Too many requests, please try again later." },
+});
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10, // Strict limit for auth endpoints
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: "Too many authentication attempts, please try again later." },
+});
 
 export function createApp(): Application {
   const app = express();
@@ -25,6 +43,8 @@ export function createApp(): Application {
   );
   app.use(express.json({ limit: "1mb" }));
   app.use(cookieParser());
+  app.use(globalLimiter); // Apply global rate limiting
+
   if (!env.isProduction) {
     app.use(morgan("dev"));
   }
@@ -32,6 +52,10 @@ export function createApp(): Application {
   app.get("/api/health", (_req, res) => {
     res.status(200).json({ success: true, data: { status: "ok" }, message: "Server is healthy" });
   });
+
+  // Strict rate limiting for auth routes
+  app.use("/api/auth/login", authLimiter);
+  app.use("/api/auth/register", authLimiter);
 
   app.use("/api/auth", authRoutes);
   app.use("/api/workspaces", workspaceRoutes);
