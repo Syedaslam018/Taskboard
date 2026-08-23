@@ -10,7 +10,7 @@ import { CookieOptions } from "express";
 const REFRESH_COOKIE_OPTIONS: CookieOptions = {
   httpOnly: true,
   secure: env.cookieSecure,
-  sameSite: "lax" as const,
+  sameSite: env.isProduction ? "strict" : "lax" as const,
   path: "/api/auth",
   maxAge: 7 * 24 * 60 * 60 * 1000,
 };
