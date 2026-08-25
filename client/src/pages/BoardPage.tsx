@@ -7,14 +7,29 @@ import { useRealtimeBoard } from "@/hooks/useRealtimeBoard";
 import { useDebouncedValue } from "@/utils/useDebouncedValue";
 import { Task, TaskPriority } from "@/types/task";
 import { reorderColumns } from "@/utils/reorder";
+import AppShell from "@/components/layout/AppShell";
 import KanbanColumn from "@/components/kanban/KanbanColumn";
+import AddColumn from "@/components/kanban/AddColumn";
+import BoardActionsMenu from "@/components/kanban/BoardActionsMenu";
 import TaskDetailModal from "@/components/kanban/TaskDetailModal";
+import Icon from "@/components/ui/Icon";
+import Skeleton from "@/components/ui/Skeleton";
+import EmptyState from "@/components/ui/EmptyState";
+import ErrorState from "@/components/ui/ErrorState";
 
 const PRIORITIES: TaskPriority[] = ["LOW", "MEDIUM", "HIGH", "URGENT"];
 
 export default function BoardPage() {
   const { boardId } = useParams<{ boardId: string }>();
-  const { data: board, isLoading: boardLoading } = useBoard(boardId!);
+  // useBoard returns `{ board, role }` - the caller's workspace role rides
+  // along so we can gate admin-only controls (column mgmt, board rename/delete)
+  // and the comment composer without a second request.
+  const { data, isLoading: boardLoading, isError, refetch } = useBoard(boardId!);
+  const board = data?.board;
+  const role = data?.role;
+  const canAdmin = role === "OWNER" || role === "ADMIN";
+  const canComment = Boolean(role) && role !== "VIEWER";
+
   const { data: tasksData, isLoading: tasksLoading } = useTasksQuery(boardId!);
   const moveTask = useMoveTask(boardId!);
   const { onlineUserIds } = useRealtimeBoard(boardId, board?.workspaceId);
@@ -96,34 +111,87 @@ export default function BoardPage() {
     moveTask.mutate({ taskId: draggableId, columnId: destination.droppableId, position: destination.index });
   }
 
-  if (boardLoading || tasksLoading || !board) {
+  // --- Error ------------------------------------------------------------
+  if (isError) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50">
-        <p className="text-sm text-slate-500">Loading board...</p>
-      </div>
+      <AppShell fluid>
+        <div className="mx-auto w-full max-w-md p-6">
+          <ErrorState
+            title="Couldn't load this board"
+            description="The board may have been deleted, or you may not have access to it."
+            onRetry={() => refetch()}
+          />
+          <div className="mt-4 text-center">
+            <Link to="/workspaces" className="text-sm font-medium text-brand-600 hover:underline dark:text-brand-400">
+              Back to workspaces
+            </Link>
+          </div>
+        </div>
+      </AppShell>
     );
   }
 
-  return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="flex items-center justify-between border-b border-slate-200 bg-white px-6 py-4">
-        <div>
-          <Link to="/workspaces" className="text-xs font-medium text-brand-600 hover:underline">
-            &larr; Workspaces
-          </Link>
-          <h1 className="text-lg font-semibold text-slate-900">{board.name}</h1>
+  // --- Loading ----------------------------------------------------------
+  if (boardLoading || tasksLoading || !board) {
+    return (
+      <AppShell fluid breadcrumb={<Skeleton className="h-4 w-40" />}>
+        <div className="flex-1 overflow-hidden p-4 sm:p-6">
+          <div className="flex gap-4">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="w-72 shrink-0 rounded-xl bg-slate-100 p-3 dark:bg-slate-800/50">
+                <Skeleton className="mb-3 h-4 w-24" />
+                <div className="space-y-2">
+                  <Skeleton className="h-16 w-full" />
+                  <Skeleton className="h-16 w-full" />
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
-        <div className="flex items-center gap-3">
-          <input
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            placeholder="Search tasks..."
-            className="w-48 rounded-lg border border-slate-300 px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
-          />
+      </AppShell>
+    );
+  }
+
+  const breadcrumb = (
+    <div className="flex min-w-0 items-center gap-2 text-sm">
+      <Link
+        to={`/workspaces/${board.workspaceId}`}
+        className="inline-flex shrink-0 items-center gap-1 text-slate-500 transition hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
+      >
+        <Icon name="arrow-left" size={16} />
+        <span className="hidden sm:inline">Boards</span>
+      </Link>
+      <span className="shrink-0 text-slate-300 dark:text-slate-600">/</span>
+      <span className="truncate font-medium text-slate-900 dark:text-slate-100">{board.name}</span>
+    </div>
+  );
+
+  const sortedColumns = board.columns.slice().sort((a, b) => a.order - b.order);
+
+  return (
+    <AppShell fluid breadcrumb={breadcrumb} actions={canAdmin ? <BoardActionsMenu board={board} /> : undefined}>
+      {/* Board sub-toolbar: presence + search/filter. Stacks on mobile. */}
+      <div className="flex shrink-0 flex-col gap-3 border-b border-slate-200 px-4 py-3 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+        <div className="flex items-center gap-1.5 self-start rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">
+          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+          {onlineUserIds.length} online
+        </div>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <div className="relative">
+            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500">
+              <Icon name="search" size={16} />
+            </span>
+            <input
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              placeholder="Search tasks..."
+              className="tb-input w-full pl-9 sm:w-56"
+            />
+          </div>
           <select
             value={priorityFilter}
             onChange={(e) => setPriorityFilter(e.target.value as TaskPriority | "")}
-            className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
+            className="tb-select w-full sm:w-40"
           >
             <option value="">All priorities</option>
             {PRIORITIES.map((p) => (
@@ -132,25 +200,27 @@ export default function BoardPage() {
               </option>
             ))}
           </select>
-          <div className="flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-            {onlineUserIds.length} online
-          </div>
         </div>
-      </header>
+      </div>
+
       {isFiltering && (
-        <div className="border-b border-amber-100 bg-amber-50 px-6 py-2 text-xs text-amber-700">
-          Filtering results — drag-and-drop is paused while a filter is active. Clear the search and priority
-          filter to reorder tasks.
+        <div className="shrink-0 border-b border-amber-100 bg-amber-50 px-4 py-2 text-xs text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-300 sm:px-6">
+          Filtering results — drag-and-drop is paused while a filter is active. Clear the search and priority filter to
+          reorder tasks.
         </div>
       )}
-      <main className="overflow-x-auto px-6 py-6">
-        <DragDropContext onDragEnd={onDragEnd}>
-          <div className="flex gap-4">
-            {board.columns
-              .slice()
-              .sort((a, b) => a.order - b.order)
-              .map((column) => (
+
+      <div className="flex-1 overflow-auto p-4 sm:p-6">
+        {sortedColumns.length === 0 && !canAdmin ? (
+          <EmptyState
+            icon="layout"
+            title="No columns yet"
+            description="This board doesn't have any columns yet. An admin can add the first one."
+          />
+        ) : (
+          <DragDropContext onDragEnd={onDragEnd}>
+            <div className="flex h-full items-start gap-4">
+              {sortedColumns.map((column) => (
                 <KanbanColumn
                   key={column._id}
                   boardId={board._id}
@@ -158,19 +228,25 @@ export default function BoardPage() {
                   tasks={filteredColumns[column._id] ?? []}
                   onSelectTask={handleSelectTask}
                   dragDisabled={isFiltering}
+                  canAdmin={canAdmin}
                 />
               ))}
-          </div>
-        </DragDropContext>
-      </main>
+              {canAdmin && <AddColumn boardId={board._id} />}
+            </div>
+          </DragDropContext>
+        )}
+      </div>
+
       {selectedTask && (
         <TaskDetailModal
           boardId={board._id}
           workspaceId={board.workspaceId}
           task={selectedTask}
+          canAdmin={canAdmin}
+          canComment={canComment}
           onClose={() => setSelectedTaskId(null)}
         />
       )}
-    </div>
+    </AppShell>
   );
 }

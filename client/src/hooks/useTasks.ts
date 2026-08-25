@@ -66,6 +66,12 @@ export function useMoveTask(boardId: string) {
   return useMutation({
     mutationFn: (input: { taskId: string; columnId: string; position: number }) =>
       taskService.move(input.taskId, { columnId: input.columnId, position: input.position }),
+    // Cancel any in-flight ["tasks"] refetch before the move so a slower,
+    // now-stale response can't land after our optimistic reorder and revert
+    // it - the rapid-drag race. Mirrors useMarkNotificationRead's onMutate.
+    onMutate: async () => {
+      await qc.cancelQueries({ queryKey: ["tasks", boardId] });
+    },
     onError: () => {
       qc.invalidateQueries({ queryKey: ["tasks", boardId] });
     },

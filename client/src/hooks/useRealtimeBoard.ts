@@ -43,9 +43,15 @@ export function useRealtimeBoard(boardId: string | undefined, workspaceId: strin
       if (task.boardId !== boardId) return;
       patchTasks((tasks) => tasks.map((t) => (t._id === task._id ? task : t)));
     };
+    // A move re-numbers the source/dest columns' siblings server-side (bulk
+    // $inc), but task:moved only carries the single moved task. Patching just
+    // that one leaves every observer with stale sibling positions -> wrong or
+    // duplicated order. Invalidate instead so observers refetch the correct
+    // ordering. (The mover already invalidates via useMoveTask's onSettled;
+    // React Query dedupes the overlapping refetch.)
     const onTaskMoved = (task: Task) => {
       if (task.boardId !== boardId) return;
-      patchTasks((tasks) => tasks.map((t) => (t._id === task._id ? task : t)));
+      queryClient.invalidateQueries({ queryKey: ["tasks", boardId] });
     };
     const onTaskDeleted = (payload: { taskId: string; boardId: string }) => {
       if (payload.boardId !== boardId) return;
