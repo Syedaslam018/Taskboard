@@ -1,8 +1,10 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from "axios";
 import { useAuthStore } from "@/stores/authStore";
 
+const API_URL = import.meta.env.VITE_API_URL || "/api";
+
 export const api = axios.create({
-  baseURL: "/api",
+  baseURL: API_URL,
   withCredentials: true, // sends the httpOnly refresh-token cookie
 });
 
@@ -36,8 +38,8 @@ api.interceptors.response.use(
     if (!isRefreshing) {
       isRefreshing = true;
       try {
-        const { data } = await axios.post(
-          "/api/auth/refresh",
+      const { data } = await axios.post(
+          `${API_URL}/auth/refresh`,
           {},
           { withCredentials: true }
         );
