@@ -5,8 +5,9 @@ import { sendSuccess } from "../utils/apiResponse";
 import { authService } from "../services/auth.service";
 import { REFRESH_COOKIE_NAME } from "../utils/token";
 import { AuthenticatedRequest } from "../middleware/auth";
+import { CookieOptions } from "express";
 
-const REFRESH_COOKIE_OPTIONS = {
+const REFRESH_COOKIE_OPTIONS: CookieOptions = {
   httpOnly: true,
   secure: env.cookieSecure,
   sameSite: env.isProduction ? "strict" : "lax" as const,

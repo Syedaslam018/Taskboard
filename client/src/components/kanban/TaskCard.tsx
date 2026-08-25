@@ -20,20 +20,27 @@ function TaskCard({ task, isDragging, onSelect }: Props) {
   return (
     <div
       onClick={() => onSelect(task._id)}
-      className={`cursor-pointer rounded-lg bg-white p-3 shadow-sm ring-1 ring-slate-200 transition hover:ring-brand-300 ${
-        isDragging ? "rotate-1 shadow-md" : ""
+      className={`cursor-pointer rounded-lg bg-white p-3 shadow-sm ring-1 ring-slate-200 transition hover:ring-brand-300 dark:bg-slate-800 dark:ring-slate-700 dark:hover:ring-brand-600 ${
+        isDragging ? "rotate-1 shadow-md ring-brand-400 dark:ring-brand-500" : ""
       }`}
     >
-      <p className="text-sm font-medium text-slate-800">{task.title}</p>
+      <p className="text-sm font-medium text-slate-800 dark:text-slate-100">{task.title}</p>
       <div className="mt-2 flex flex-wrap items-center gap-2">
         <PriorityBadge priority={task.priority} />
         {task.dueDate && (
-          <span className={`text-xs ${isOverdue ? "font-medium text-red-600" : "text-slate-400"}`}>
+          <span
+            className={`text-xs ${
+              isOverdue ? "font-medium text-red-600 dark:text-red-400" : "text-slate-400 dark:text-slate-500"
+            }`}
+          >
             {new Date(task.dueDate).toLocaleDateString()}
           </span>
         )}
         {task.labels.map((label) => (
-          <span key={label} className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
+          <span
+            key={label}
+            className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600 dark:bg-slate-700 dark:text-slate-300"
+          >
             {label}
           </span>
         ))}

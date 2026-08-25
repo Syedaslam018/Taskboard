@@ -1,15 +1,7 @@
 import { useState } from "react";
 import { useNotifications, useMarkNotificationRead } from "@/hooks/useNotifications";
-
-function timeAgo(iso: string): string {
-  const diffMs = Date.now() - new Date(iso).getTime();
-  const minutes = Math.floor(diffMs / 60000);
-  if (minutes < 1) return "just now";
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.floor(hours / 24)}d ago`;
-}
+import { timeAgo } from "@/utils/timeAgo";
+import Icon from "@/components/ui/Icon";
 
 export default function NotificationBell() {
   const [open, setOpen] = useState(false);
@@ -22,12 +14,12 @@ export default function NotificationBell() {
     <div className="relative">
       <button
         onClick={() => setOpen((o) => !o)}
-        className="relative rounded-full p-2 text-slate-500 hover:bg-slate-100"
+        className="relative inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/50 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
         aria-label="Notifications"
       >
-        🔔
+        <Icon name="bell" size={18} />
         {unreadCount > 0 && (
-          <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-medium text-white">
+          <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-medium text-white ring-2 ring-white dark:ring-slate-900">
             {unreadCount > 9 ? "9+" : unreadCount}
           </span>
         )}
@@ -36,25 +28,31 @@ export default function NotificationBell() {
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 z-50 mt-2 w-80 rounded-xl bg-white shadow-lg ring-1 ring-slate-200">
-            <div className="border-b border-slate-100 px-4 py-3">
-              <p className="text-sm font-semibold text-slate-900">Notifications</p>
+          <div className="tb-menu absolute right-0 z-50 mt-2 w-80 animate-scale-in origin-top-right p-0">
+            <div className="border-b border-slate-100 px-4 py-3 dark:border-slate-800">
+              <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Notifications</p>
             </div>
-            <div className="max-h-96 overflow-y-auto">
-              {isLoading && <p className="px-4 py-6 text-center text-sm text-slate-400">Loading...</p>}
+            <div className="max-h-96 overflow-y-auto p-1">
+              {isLoading && (
+                <p className="px-4 py-6 text-center text-sm text-slate-400 dark:text-slate-500">Loading...</p>
+              )}
               {!isLoading && data?.notifications.length === 0 && (
-                <p className="px-4 py-6 text-center text-sm text-slate-400">You're all caught up.</p>
+                <p className="px-4 py-6 text-center text-sm text-slate-400 dark:text-slate-500">
+                  You're all caught up.
+                </p>
               )}
               {data?.notifications.map((n) => (
                 <button
                   key={n._id}
                   onClick={() => !n.read && markRead.mutate(n._id)}
-                  className={`block w-full px-4 py-3 text-left text-sm hover:bg-slate-50 ${
-                    n.read ? "text-slate-500" : "bg-brand-50/50 font-medium text-slate-800"
+                  className={`block w-full rounded-lg px-3 py-2.5 text-left text-sm transition hover:bg-slate-100 dark:hover:bg-slate-800 ${
+                    n.read
+                      ? "text-slate-500 dark:text-slate-400"
+                      : "bg-brand-50/60 font-medium text-slate-800 dark:bg-brand-500/10 dark:text-slate-100"
                   }`}
                 >
                   <p>{n.message}</p>
-                  <p className="mt-0.5 text-xs text-slate-400">{timeAgo(n.createdAt)}</p>
+                  <p className="mt-0.5 text-xs text-slate-400 dark:text-slate-500">{timeAgo(n.createdAt)}</p>
                 </button>
               ))}
             </div>

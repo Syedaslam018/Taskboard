@@ -1,3 +1,113 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-slate-50 text-slate-900 antialiased;
+    @apply dark:bg-slate-950 dark:text-slate-100;
+  }
+
+  html.dark {
+    color-scheme: dark;
+  }
+
+  ::selection {
+    @apply bg-brand-500/25;
+  }
+
+  /* Polished, theme-aware scrollbars (WebKit + Firefox). */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: theme("colors.slate.300") transparent;
+  }
+  .dark * {
+    scrollbar-color: theme("colors.slate.700") transparent;
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-slate-300 dark:bg-slate-700;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-slate-400 dark:bg-slate-600;
+    background-clip: padding-box;
+  }
+
+  /* Respect users who prefer less motion - disable the entrance animations. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer components {
+  /* ---- Surfaces ---- */
+  .tb-card {
+    @apply rounded-xl bg-white shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800;
+  }
+  .tb-card-interactive {
+    @apply tb-card transition duration-150 hover:-translate-y-0.5 hover:shadow-md hover:ring-brand-300 dark:hover:ring-brand-700;
+  }
+
+  /* ---- Form controls ---- */
+  .tb-input,
+  .tb-select,
+  .tb-textarea {
+    @apply w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm transition
+      placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30
+      dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-brand-500;
+  }
+  .tb-label {
+    @apply mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300;
+  }
+
+  /* ---- Buttons ---- */
+  .tb-btn {
+    @apply inline-flex items-center justify-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-medium transition
+      focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/50 disabled:cursor-not-allowed disabled:opacity-60;
+  }
+  .tb-btn-primary {
+    @apply tb-btn bg-brand-600 text-white shadow-sm hover:bg-brand-700 active:bg-brand-800;
+  }
+  .tb-btn-secondary {
+    @apply tb-btn border border-slate-300 bg-white text-slate-700 shadow-sm hover:bg-slate-50
+      dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700;
+  }
+  .tb-btn-ghost {
+    @apply tb-btn text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800;
+  }
+  .tb-btn-danger {
+    @apply tb-btn bg-red-600 text-white shadow-sm hover:bg-red-700 active:bg-red-800;
+  }
+
+  /* ---- Misc ---- */
+  .tb-badge {
+    @apply inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium;
+  }
+  .tb-skeleton {
+    @apply animate-pulse rounded-md bg-slate-200 dark:bg-slate-800;
+  }
+  .tb-menu {
+    @apply z-50 rounded-xl border border-slate-200 bg-white p-1 shadow-lg ring-1 ring-black/5
+      dark:border-slate-700 dark:bg-slate-900 dark:ring-white/10;
+  }
+  .tb-menu-item {
+    @apply flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-slate-700 transition
+      hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800;
+  }
+}
