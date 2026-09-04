@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import axios from "axios";
 import { useAuthStore } from "@/stores/authStore";
+import { api } from "@/services/api";
+
 
 /**
  * Runs once on app load. The access token lives only in memory (see
@@ -17,7 +18,7 @@ export function useBootstrapAuth(): boolean {
 
   useEffect(() => {
     let cancelled = false;
-    axios
+    api
       .post("/auth/refresh", {}, { withCredentials: true })
       .then((res) => {
         if (!cancelled) setAccessToken(res.data.data.accessToken);
