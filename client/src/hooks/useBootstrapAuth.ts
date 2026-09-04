@@ -18,7 +18,7 @@ export function useBootstrapAuth(): boolean {
   useEffect(() => {
     let cancelled = false;
     axios
-      .post("/api/auth/refresh", {}, { withCredentials: true })
+      .post("/auth/refresh", {}, { withCredentials: true })
       .then((res) => {
         if (!cancelled) setAccessToken(res.data.data.accessToken);
       })
