@@ -82,7 +82,7 @@ function KanbanColumn({ boardId, column, tasks, onSelectTask, dragDisabled, canA
   };
 
   return (
-    <div className="flex w-72 shrink-0 flex-col rounded-xl bg-slate-100 p-3 dark:bg-slate-800/50">
+    <div className="tb-board-column flex w-72 shrink-0 flex-col rounded-2xl p-3">
       <div className="mb-2 flex items-center justify-between gap-2 px-1">
         {renaming ? (
           <input
@@ -112,13 +112,13 @@ function KanbanColumn({ boardId, column, tasks, onSelectTask, dragDisabled, canA
         )}
 
         <div className="flex shrink-0 items-center gap-1">
-          <span className="text-xs text-slate-400 dark:text-slate-500">{tasks.length}</span>
+                      <span className="rounded-md bg-white/60 px-1.5 py-0.5 text-xs font-semibold text-slate-400 dark:bg-black/10 dark:text-slate-500">{tasks.length}</span>
           {canAdmin && !renaming && (
             <div className="relative">
               <button
                 onClick={() => setMenuOpen((o) => !o)}
                 aria-label="Column options"
-                className="inline-flex h-6 w-6 items-center justify-center rounded-md text-slate-400 transition hover:bg-slate-200 hover:text-slate-600 dark:hover:bg-slate-700 dark:hover:text-slate-300"
+                      className="tb-icon-button h-7 w-7"
               >
                 <Icon name="more-horizontal" size={16} />
               </button>

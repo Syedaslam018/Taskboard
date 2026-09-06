@@ -61,7 +61,7 @@ export default function BoardActionsMenu({ board }: { board: Board }) {
           type="button"
           onClick={() => setMenuOpen((o) => !o)}
           aria-label="Board options"
-          className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+          className="tb-icon-button"
         >
           <Icon name="more-horizontal" size={20} />
         </button>

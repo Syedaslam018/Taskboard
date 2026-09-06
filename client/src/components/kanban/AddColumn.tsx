@@ -33,7 +33,7 @@ export default function AddColumn({ boardId }: { boardId: string }) {
       <button
         type="button"
         onClick={() => setAdding(true)}
-        className="flex w-72 shrink-0 items-center gap-1.5 self-start rounded-xl border border-dashed border-slate-300 px-3 py-3 text-sm font-medium text-slate-500 transition hover:border-brand-400 hover:text-brand-600 dark:border-slate-700 dark:text-slate-400 dark:hover:border-brand-600 dark:hover:text-brand-400"
+        className="flex w-72 shrink-0 items-center gap-1.5 self-start rounded-2xl border border-dashed border-slate-300 px-3 py-3 text-sm font-semibold text-slate-500 transition hover:border-brand-400 hover:bg-brand-50 hover:text-brand-700 dark:border-slate-700 dark:text-slate-400 dark:hover:border-brand-600 dark:hover:bg-brand-500/10 dark:hover:text-brand-300"
       >
         <Icon name="plus" size={16} />
         Add column

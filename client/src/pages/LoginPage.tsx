@@ -32,21 +32,21 @@ export default function LoginPage() {
   });
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center bg-slate-50 px-4 dark:bg-slate-950">
+    <div className="tb-auth-shell relative flex min-h-screen items-center justify-center px-4 py-10">
       <div className="absolute right-4 top-4">
         <ThemeToggle />
       </div>
 
       <div className="w-full max-w-sm animate-slide-up">
         <div className="mb-6 flex flex-col items-center text-center">
-          <span className="mb-3 inline-flex h-11 w-11 items-center justify-center rounded-xl bg-brand-600 text-white shadow-sm">
-            <Icon name="layout" size={22} />
+          <span className="tb-brand-mark mb-4 inline-flex h-12 w-12 items-center justify-center rounded-2xl">
+            <Icon name="layout" size={23} strokeWidth={2.25} />
           </span>
-          <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Log in to TaskBoard</h1>
+          <h1 className="tb-page-heading text-2xl font-semibold text-slate-900 dark:text-slate-100">Log in to TaskBoard</h1>
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Welcome back — let's get to work.</p>
         </div>
 
-        <div className="tb-card p-6 sm:p-8">
+        <div className="tb-auth-panel rounded-2xl p-6 sm:p-8">
           <form onSubmit={onSubmit} className="space-y-4">
             <div>
               <label className="tb-label">Email</label>

@@ -18,7 +18,7 @@ interface Props {
 // opts into `fluid` for a full-bleed canvas.
 export default function AppShell({ children, breadcrumb, actions, fluid }: Props) {
   return (
-    <div className="flex min-h-screen flex-col bg-slate-50 dark:bg-slate-950">
+    <div className="tb-app-shell flex min-h-screen flex-col">
       <TopBar breadcrumb={breadcrumb} actions={actions} />
       <main
         className={

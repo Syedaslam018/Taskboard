@@ -35,7 +35,11 @@ export default function WorkspacesPage() {
       actions={newButton}
     >
       <div className="animate-fade-in">
-        <h2 className="mb-5 text-xl font-semibold text-slate-900 dark:text-slate-100">Your workspaces</h2>
+        <div className="mb-6">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">Workspace index</p>
+          <h2 className="tb-page-heading mt-2 text-3xl font-semibold text-slate-900 dark:text-slate-100">Your workspaces</h2>
+          <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">A focused home for every team, project, and board.</p>
+        </div>
 
         {isLoading ? (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -46,12 +50,18 @@ export default function WorkspacesPage() {
         ) : workspaces && workspaces.length > 0 ? (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {workspaces.map((ws) => (
-              <Link key={ws._id} to={`/workspaces/${ws._id}`} className="tb-card-interactive block p-4">
-                <p className="font-medium text-slate-900 dark:text-slate-100">{ws.name}</p>
+              <Link key={ws._id} to={`/workspaces/${ws._id}`} className="tb-card-interactive group block p-5">
+                <div className="flex items-start justify-between gap-3">
+                  <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-300">
+                    <Icon name="layout" size={17} />
+                  </span>
+                  <Icon name="chevron-right" size={17} className="text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-brand-500 dark:text-slate-600" />
+                </div>
+                <p className="mt-5 font-semibold text-slate-900 dark:text-slate-100">{ws.name}</p>
                 {ws.description && (
                   <p className="mt-1 line-clamp-2 text-sm text-slate-500 dark:text-slate-400">{ws.description}</p>
                 )}
-                <p className="mt-3 flex items-center gap-1.5 text-xs text-slate-400 dark:text-slate-500">
+                <p className="mt-5 flex items-center gap-1.5 text-xs font-medium text-slate-400 dark:text-slate-500">
                   <Icon name="users" size={14} />
                   {ws.members.length} member{ws.members.length !== 1 ? "s" : ""}
                 </p>
