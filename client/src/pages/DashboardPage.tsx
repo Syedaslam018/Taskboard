@@ -23,26 +23,31 @@ export default function DashboardPage() {
   return (
     <AppShell breadcrumb={<span className="text-sm font-medium text-slate-700 dark:text-slate-200">Dashboard</span>}>
       <div className="animate-fade-in">
-        <p className="text-sm text-slate-500 dark:text-slate-400">Welcome back,</p>
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">Overview</p>
         {userLoading ? (
           <Skeleton className="mt-1 h-8 w-48" />
         ) : (
-          <h2 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">{user?.name}</h2>
+          <h2 className="tb-page-heading mt-2 text-3xl font-semibold text-slate-900 dark:text-slate-100">
+            Welcome back, {user?.name}
+          </h2>
         )}
+        <p className="mt-2 max-w-xl text-sm text-slate-500 dark:text-slate-400">
+          Keep momentum across your workspaces, boards, and the tasks that need your attention.
+        </p>
 
-        {/* Stat cards */}
-        <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {/* Compact metric strip */}
+        <div className="tb-metric-strip mt-8">
           {STAT_CARDS.map(({ key, label, icon, accent }) => (
-            <div key={key} className="tb-card flex items-center gap-4 p-5">
-              <span className={`inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${accent}`}>
+            <div key={key} className="tb-metric">
+              <span className={`tb-metric-icon ${accent}`}>
                 <Icon name={icon} size={22} />
               </span>
               <div>
-                <p className="text-sm text-slate-500 dark:text-slate-400">{label}</p>
+                <p className="text-xs font-medium text-slate-500 dark:text-slate-400">{label}</p>
                 {dashboardLoading ? (
                   <Skeleton className="mt-1 h-7 w-10" />
                 ) : (
-                  <p className="text-2xl font-semibold text-slate-900 dark:text-slate-100">
+                  <p className="mt-0.5 text-2xl font-semibold tracking-tight text-slate-900 dark:text-slate-100">
                     {dashboard?.stats[key] ?? 0}
                   </p>
                 )}
@@ -51,11 +56,14 @@ export default function DashboardPage() {
           ))}
         </div>
 
-        <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <div className="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-3">
           {/* My tasks */}
-          <div className="tb-card p-5 lg:col-span-2">
-            <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">My Tasks</h3>
+          <div className="tb-card p-5 lg:col-span-2 sm:p-6">
+            <div className="mb-4 flex items-end justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400 dark:text-slate-500">Queue</p>
+                <h3 className="tb-section-heading mt-1 text-lg font-semibold text-slate-900 dark:text-slate-100">My tasks</h3>
+              </div>
               {(dashboard?.stats.dueSoon ?? 0) > 0 && (
                 <span className="tb-badge bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300">
                   {dashboard?.stats.dueSoon} due soon
@@ -104,8 +112,9 @@ export default function DashboardPage() {
           </div>
 
           {/* Recent activity */}
-          <div className="tb-card p-5">
-            <h3 className="mb-3 text-sm font-semibold text-slate-900 dark:text-slate-100">Recent Activity</h3>
+          <div className="tb-card p-5 sm:p-6">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400 dark:text-slate-500">Signal</p>
+            <h3 className="tb-section-heading mb-4 mt-1 text-lg font-semibold text-slate-900 dark:text-slate-100">Recent activity</h3>
             {dashboardLoading ? (
               <div className="space-y-3">
                 {[0, 1, 2, 3].map((i) => (

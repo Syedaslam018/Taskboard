@@ -47,7 +47,10 @@ export default function WorkspaceDetailPage() {
     <AppShell breadcrumb={breadcrumb} actions={newButton}>
       <div className="grid animate-fade-in grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2">
-          <h2 className="mb-4 text-lg font-semibold text-slate-900 dark:text-slate-100">Boards</h2>
+          <div className="mb-5">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">Workspace boards</p>
+            <h2 className="tb-page-heading mt-2 text-3xl font-semibold text-slate-900 dark:text-slate-100">Boards</h2>
+          </div>
           {isLoading ? (
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {[0, 1].map((i) => (
@@ -57,12 +60,17 @@ export default function WorkspaceDetailPage() {
           ) : boards && boards.length > 0 ? (
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {boards.map((board) => (
-                <Link key={board._id} to={`/boards/${board._id}`} className="tb-card-interactive block p-4">
-                  <p className="flex items-center gap-2 font-medium text-slate-900 dark:text-slate-100">
-                    <Icon name="layout" size={16} className="text-brand-500" />
-                    {board.name}
-                  </p>
-                  <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+                <Link key={board._id} to={`/boards/${board._id}`} className="tb-card-interactive group block p-5">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="flex min-w-0 items-center gap-2 font-semibold text-slate-900 dark:text-slate-100">
+                      <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-300">
+                        <Icon name="layout" size={16} />
+                      </span>
+                      <span className="truncate">{board.name}</span>
+                    </p>
+                    <Icon name="chevron-right" size={17} className="text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-brand-500 dark:text-slate-600" />
+                  </div>
+                  <p className="mt-5 text-xs font-medium text-slate-400 dark:text-slate-500">
                     {board.columns.length} column{board.columns.length !== 1 ? "s" : ""}
                   </p>
                 </Link>

@@ -171,9 +171,9 @@ export default function BoardPage() {
   return (
     <AppShell fluid breadcrumb={breadcrumb} actions={canAdmin ? <BoardActionsMenu board={board} /> : undefined}>
       {/* Board sub-toolbar: presence + search/filter. Stacks on mobile. */}
-      <div className="flex shrink-0 flex-col gap-3 border-b border-slate-200 px-4 py-3 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-        <div className="flex items-center gap-1.5 self-start rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">
-          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+      <div className="tb-board-toolbar flex shrink-0 flex-col gap-3 border-b border-slate-200 px-4 py-3 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+        <div className="flex items-center gap-2 self-start rounded-lg bg-brand-50 px-3 py-1.5 text-xs font-semibold text-brand-700 dark:bg-brand-500/10 dark:text-brand-300">
+          <span className="h-1.5 w-1.5 rounded-full bg-brand-500 shadow-[0_0_0_3px_rgb(18_179_160_/_0.15)]" />
           {onlineUserIds.length} online
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -210,7 +210,7 @@ export default function BoardPage() {
         </div>
       )}
 
-      <div className="flex-1 overflow-auto p-4 sm:p-6">
+      <div className="tb-board-canvas flex-1 overflow-auto p-4 sm:p-6">
         {sortedColumns.length === 0 && !canAdmin ? (
           <EmptyState
             icon="layout"

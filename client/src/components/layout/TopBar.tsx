@@ -18,22 +18,22 @@ interface Props {
 // the app feel like one product rather than a set of separate screens.
 export default function TopBar({ breadcrumb, actions }: Props) {
   return (
-    <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/80 backdrop-blur dark:border-slate-800 dark:bg-slate-900/80">
-      <div className="flex h-14 items-center gap-3 px-4 sm:px-6">
+    <header className="tb-topbar sticky top-0 z-30 border-b backdrop-blur-xl">
+      <div className="mx-auto flex h-16 w-full items-center gap-3 px-4 sm:px-6">
         <Link
           to="/dashboard"
-          className="flex shrink-0 items-center gap-2 text-slate-900 transition hover:opacity-80 dark:text-slate-100"
+          className="flex shrink-0 items-center gap-2.5 transition hover:opacity-80"
         >
-          <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-brand-600 text-white">
-            <Icon name="layout" size={18} />
+          <span className="tb-brand-mark inline-flex h-9 w-9 items-center justify-center rounded-xl">
+            <Icon name="layout" size={18} strokeWidth={2.25} />
           </span>
-          <span className="hidden text-sm font-semibold sm:inline">TaskBoard</span>
+          <span className="hidden text-sm font-bold tracking-tight sm:inline">TaskBoard</span>
         </Link>
 
         {breadcrumb && (
           <>
             <span className="text-slate-300 dark:text-slate-600">/</span>
-            <div className="min-w-0 flex-1 truncate">{breadcrumb}</div>
+            <div className="tb-breadcrumb min-w-0 flex-1 truncate">{breadcrumb}</div>
           </>
         )}
 

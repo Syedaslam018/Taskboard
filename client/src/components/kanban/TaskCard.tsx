@@ -20,8 +20,8 @@ function TaskCard({ task, isDragging, onSelect }: Props) {
   return (
     <div
       onClick={() => onSelect(task._id)}
-      className={`cursor-pointer rounded-lg bg-white p-3 shadow-sm ring-1 ring-slate-200 transition hover:ring-brand-300 dark:bg-slate-800 dark:ring-slate-700 dark:hover:ring-brand-600 ${
-        isDragging ? "rotate-1 shadow-md ring-brand-400 dark:ring-brand-500" : ""
+      className={`tb-task-card cursor-pointer rounded-xl p-3 transition hover:-translate-y-0.5 hover:border-brand-400 ${
+        isDragging ? "rotate-1 border-brand-400 shadow-md dark:border-brand-500" : ""
       }`}
     >
       <p className="text-sm font-medium text-slate-800 dark:text-slate-100">{task.title}</p>
